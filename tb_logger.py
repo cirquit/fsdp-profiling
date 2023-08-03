@@ -1,10 +1,12 @@
+import torch
+import traceback
 from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
 
 class TBLogger():
     """ """
 
-    def __init__(self, log_group, log_path="./tb_logs"):
+    def __init__(self, log_group, log_path="./.tb_logs"):
         """Usage:
         ```
         with TBLogger(log_group = "my_group") as logger:
@@ -20,11 +22,15 @@ class TBLogger():
        """ """
        return self
 
-    def __exit__(self):
+    def __exit__(self, exc_type, exc_value, tb):
         """Closes automatically TB writer automatically on object
         out of scope
         """
-        self.logger.close()
+        self._logger.close()
+        # pass execption through
+        if exc_type is not None:
+            traceback.print_exception(exc_type, exc_value, tb)
+            return False
 
     def _inc_log_counter(self):
         """ """
@@ -32,7 +38,7 @@ class TBLogger():
 
     def log_hparams(self, hparams=None, metrics=None):
         """ """
-        self.logger.add_hparams(hparam_dict=hparams,
+        self._logger.add_hparams(hparam_dict=hparams,
                                 metric_dict=metrics,
                                 run_name=self._log_group)
 
@@ -42,7 +48,7 @@ class TBLogger():
         if type(value) == torch.Tensor:
             if value.device.type != "cpu":
                 value = value.to("cpu")
-        self.logger.add_scalar(
+        self._logger.add_scalar(
             tag=name,
             scalar_value=value,
             global_step=self._log_counter,
@@ -53,4 +59,4 @@ class TBLogger():
 
     def flush(self):
         """ """
-        self.logger.flush()
+        self._logger.flush()

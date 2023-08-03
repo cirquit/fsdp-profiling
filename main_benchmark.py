@@ -68,7 +68,7 @@ from datetime import datetime
 # local imports
 import verify
 import policies
-from logger import TBLogger
+from tb_logger import TBLogger
 
 import datasets_grammar as dg
 import tqdm
