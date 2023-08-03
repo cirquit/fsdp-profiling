@@ -68,7 +68,8 @@ from datetime import datetime
 # local imports
 import verify
 import policies
-from tb_logger import TBLogger
+from utils.tb_logger import TBLogger
+from utils.timers import TBTimeIt as timeit
 
 import datasets_grammar as dg
 import tqdm
@@ -76,15 +77,12 @@ import tqdm
 # config
 import config
 
-
 # some globals
 g_port = "12369"
 g_addr = "localhost"
 
-
 def _is_rank_0():
     return 0 == os.getenv("RANK")
-
 
 def get_date_of_run():
     """create date and time for file save uniqueness
@@ -221,11 +219,12 @@ def train(
             batch[key] = batch[key].to(local_rank)
 
         optimizer.zero_grad()
-        output = model(
-            input_ids=batch["source_ids"],
-            attention_mask=batch["source_mask"],
-            labels=batch["target_ids"],
-        )
+        with timeit("forward", logger) as forward_time_s:
+            output = model(
+                input_ids=batch["source_ids"],
+                attention_mask=batch["source_mask"],
+                labels=batch["target_ids"],
+            )
 
         loss = output["loss"]
         logger.log("01_general/loss", loss, commit=True)
