@@ -317,6 +317,7 @@ def fsdp_main(args, logger):
     if rank == 0:
         print(f"--> running with these defaults {cfg}")
         time_of_run = get_date_of_run()
+        logger.log_hparams(hparams=vars(cfg))
 
     setup_tasks(rank, world_size, cfg)
 
@@ -579,6 +580,8 @@ if __name__ == "__main__":
 
     args = parse_args()
 
-    with TBLogger(log_group=args.group_name) as logger:
+    rank = int(os.environ["RANK"])
+    run_name = f"{args.group_name}-r{rank}"
+    with TBLogger(run_name=run_name) as logger:
         # torch run start
         fsdp_main(args, logger)
