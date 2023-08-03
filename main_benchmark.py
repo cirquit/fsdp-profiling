@@ -214,12 +214,19 @@ def train(
         inner_pbar = tqdm.tqdm(
             range(len(train_loader)), colour="blue", desc="Training Epoch"
         )
-    for batch in train_loader:
-        for key in batch.keys():
-            batch[key] = batch[key].to(local_rank)
 
-        optimizer.zero_grad()
-        with timeit("forward", logger) as forward_time_s:
+    # starting timer for dataload due to iterator
+    step_time_start_s = time.perf_counter()
+
+    for batch in train_loader:
+        dataload_time_s = time.perf_counter() - step_time_start_s
+
+        with timeit("dataload_cuda_mode", logger) as dataload_cuda_move_timer:
+            for key in batch.keys():
+                batch[key] = batch[key].to(local_rank)
+        with timeit("zero_grad", logger) as zero_grad_timer:
+            optimizer.zero_grad()
+        with timeit("forward", logger) as forward_timer:
             output = model(
                 input_ids=batch["source_ids"],
                 attention_mask=batch["source_mask"],
@@ -227,14 +234,17 @@ def train(
             )
 
         loss = output["loss"]
-        logger.log("01_general/loss", loss, commit=True)
         if scaler:
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
+            with timeit("backward", logger) as backward_timer:
+                scaler.scale(loss).backward()
+            with timeit("opt_step", logger) as opt_step_timer:
+                scaler.step(optimizer)
             scaler.update()  # adjust scaling for next minibatch
         else:
-            loss.backward()
-            optimizer.step()
+            with timeit("backward", logger) as backward_timer:
+                loss.backward()
+            with timeit("opt_step", logger) as opt_step_timer:
+                optimizer.step()
 
         ddp_loss[0] += loss.item()
         ddp_loss[1] += len(batch)
@@ -243,15 +253,30 @@ def train(
         if profiler:
             profiler.step()
 
+        logger.log("01_general/loss", loss)
+        logger.log("01_general/epoch", epoch)
+        logger.log("02_timing/dataload_time_s", dataload_time_s)
+        logger.log("02_timing/calculated_step_time_s",
+            dataload_time_s + \
+            dataload_cuda_move_timer.delta_time_s() + \
+            zero_grad_timer.delta_time_s() + \
+            forward_timer.delta_time_s() + \
+            backward_timer.delta_time_s() + \
+            opt_step_timer.delta_time_s())
+        # restarting timer for dataload due to iterator
+        actual_step_time_s = time.perf_counter() - step_time_start_s
+        step_time_start_s = time.perf_counter()
+        logger.log("02_timing/actual_step_time_s", actual_step_time_s, commit=True)
+
     dist.all_reduce(ddp_loss, op=dist.ReduceOp.SUM)
 
     train_accuracy = ddp_loss[0] / ddp_loss[1]
     if rank == 0:
         inner_pbar.close()
 
-        print(
-            f"Train Epoch: \t{epoch}, Loss: \t{train_accuracy:.4f}"
-        )  # .format(epoch, train_accuracy))
+    #    print(
+    #        f"Train Epoch: \t{epoch}, Loss: \t{train_accuracy:.4f}"
+    #    )  # .format(epoch, train_accuracy))
     return train_accuracy
 
 
