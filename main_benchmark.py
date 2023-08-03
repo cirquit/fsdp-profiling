@@ -68,52 +68,13 @@ from datetime import datetime
 # local imports
 import verify
 import policies
+from logger import TBLogger
 
 import datasets_grammar as dg
 import tqdm
 
 # config
 import config
-
-# logger
-from torch.utils.tensorboard import SummaryWriter
-from pathlib import Path
-
-class TBLogger():
-
-    def __init__(self, log_group, log_path="./tb_logs"):
-        """
-        """
-        self.full_log_path = Path(log_path) / Path(log_group)
-        self.logger = SummaryWriter(self.full_log_path)
-        self._log_counter = 0
-
-    def _inc_log_counter(self):
-        """ """
-        self._log_counter += 1
-
-    def log_hparams(self, hparams):
-        """ """
-        self.logger.add_hparams(hparams)
-
-    def log(self, name, value, commit=False):
-        """ Wrapper around scalar logger
-        """
-        if type(value) == torch.Tensor:
-            if value.device.type != "cpu":
-                value = value.to("cpu")
-        self.logger.add_scalar(
-            tag=name,
-            scalar_value=value,
-            global_step=self._log_counter,
-            new_style=True
-        )
-        if commit:
-            self._inc_log_counter()
-
-    def flush(self):
-        """ """
-        self.logger.flush()
 
 
 # some globals
@@ -614,13 +575,10 @@ def fsdp_main(args, logger):
 
 
 # ------------------ Main functions above ------------
-
-
 if __name__ == "__main__":
 
     args = parse_args()
-    logger = TBLogger(log_group = args.group_name)
-   # torch run start
-    fsdp_main(args, logger)
 
-    writer.close()
+    with TBLogger(log_group=args.group_name) as logger:
+        # torch run start
+        fsdp_main(args, logger)
