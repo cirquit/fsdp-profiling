@@ -130,3 +130,8 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# logging specific
+.tb_logs/
+.logcounter/
+
