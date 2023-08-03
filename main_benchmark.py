@@ -75,6 +75,47 @@ import tqdm
 # config
 import config
 
+# logger
+from torch.utils.tensorboard import SummaryWriter
+from pathlib import Path
+
+class TBLogger():
+
+    def __init__(self, log_group, log_path="./tb_logs"):
+        """
+        """
+        self.full_log_path = Path(log_path) / Path(log_group)
+        self.logger = SummaryWriter(self.full_log_path)
+        self._log_counter = 0
+
+    def _inc_log_counter(self):
+        """ """
+        self._log_counter += 1
+
+    def log_hparams(self, hparams):
+        """ """
+        self.logger.add_hparams(hparams)
+
+    def log(self, name, value, commit=False):
+        """ Wrapper around scalar logger
+        """
+        if type(value) == torch.Tensor:
+            if value.device.type != "cpu":
+                value = value.to("cpu")
+        self.logger.add_scalar(
+            tag=name,
+            scalar_value=value,
+            global_step=self._log_counter,
+            new_style=True
+        )
+        if commit:
+            self._inc_log_counter()
+
+    def flush(self):
+        """ """
+        self.logger.flush()
+
+
 # some globals
 g_port = "12369"
 g_addr = "localhost"
@@ -104,6 +145,9 @@ def parse_args():
     )
     parser.add_argument(
         "--seed", type=int, default=1, metavar="S", help="random seed (default: 2022)"
+    )
+    parser.add_argument(
+        "--group_name", type=str, help="Logging group variable"
     )
     parser.add_argument(
         "--epochs",
@@ -200,6 +244,7 @@ def train(
     sampler=None,
     profiler=None,
     scaler=None,
+    logger=None,
 ):
     model.train()
     ddp_loss = torch.zeros(2).to(local_rank)
@@ -222,6 +267,7 @@ def train(
         )
 
         loss = output["loss"]
+        logger.log("01_general/loss", loss, commit=True)
         if scaler:
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -294,7 +340,7 @@ def validation(cfg, model, local_rank, rank, world_size, test_loader, scaler):
 # ---- fsdp main ------------------------------------------------------------
 
 
-def fsdp_main(args):
+def fsdp_main(args, logger):
     """main process within each process"""
     cfg = config.benchmark_config()  # loads from defaults
     print(f"--> Running with benchmark configs!")
@@ -504,6 +550,7 @@ def fsdp_main(args):
             sampler=sampler1,
             profiler=torch_profiler,
             scaler=scaler,
+            logger=logger
         )
         if cfg.block_for_validation:
             dist.barrier()
@@ -572,8 +619,8 @@ def fsdp_main(args):
 if __name__ == "__main__":
 
     args = parse_args()
+    logger = TBLogger(log_group = args.group_name)
+   # torch run start
+    fsdp_main(args, logger)
 
-    gpus_per_node = torch.cuda.device_count()
-
-    # torch run start
-    fsdp_main(args)
+    writer.close()
