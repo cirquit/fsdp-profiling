@@ -52,7 +52,6 @@ class TBLogger():
         if commit:
             self._inc_log_counter()
 
-
     def log_dict(self, dict_values, commit=False):
         """Call self.log in a loop. Commit last call if commit=True.
         """
@@ -61,6 +60,15 @@ class TBLogger():
             if i == dict_len:
                 commit = True
             self.log(name=key, value=value, commit=commit)
+
+    def log_text(self, name, text, commit=False):
+        """ """
+        self._logger.add_text(
+            tag=name,
+            text_string=text,
+            global_step=self._log_counter)
+        if commit:
+            self._inc_log_counter()
 
     def flush(self):
         """ """

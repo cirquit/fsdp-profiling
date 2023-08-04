@@ -327,13 +327,19 @@ def validation(cfg, model, local_rank, rank, world_size, test_loader, scaler):
     return val_loss
 
 
+def log_config(logger, cfg):
+    for key, value in vars(cfg).items():
+        logger.log_text(f"00_cfg/{key}", str(value))
+
 # ---- fsdp main ------------------------------------------------------------
 
 
 def fsdp_main(args, logger):
     """main process within each process"""
     cfg = config.benchmark_config()  # loads from defaults
-    print(f"--> Running with benchmark configs!")
+    log_config(logger=logger, cfg=cfg)
+    monitor = Monitor()
+    logger.log_dict(monitor.get_static_info())
 
     torch.manual_seed(cfg.seed)
     torch.cuda.manual_seed(cfg.seed)
@@ -524,7 +530,7 @@ def fsdp_main(args, logger):
         mem_reserved_tracker = []
 
     train_start_time_s = time.perf_counter()
-    monitor = Monitor()
+
     for epoch in range(1, epochs + 1):
         if rank == 0:
             t0 = time.time()
