@@ -52,6 +52,16 @@ class TBLogger():
         if commit:
             self._inc_log_counter()
 
+
+    def log_dict(self, dict_values, commit=False):
+        """Call self.log in a loop. Commit last call if commit=True.
+        """
+        dict_len = len(dict_values)
+        for i, (key, value) in enumerate(dict_values.items()):
+            if i == dict_len:
+                commit = True
+            self.log(name=key, value=value, commit=commit)
+
     def flush(self):
         """ """
         self._logger.flush()

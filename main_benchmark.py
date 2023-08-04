@@ -68,6 +68,7 @@ from datetime import datetime
 # local imports
 import verify
 import policies
+from utils.monitor import Monitor
 from utils.tb_logger import TBLogger
 from utils.timers import TBTimeIt as timeit
 
@@ -202,6 +203,7 @@ def train(
     epoch,
     epoch_start_time_s,
     train_start_time_s,
+    monitor,
     sampler=None,
     profiler=None,
     scaler=None,
@@ -255,6 +257,7 @@ def train(
         if profiler:
             profiler.step()
 
+        logger.log_dict(monitor.get_sys_info())
         logger.log("01_general/loss", loss)
         logger.log("01_general/epoch", epoch)
         logger.log("01_general/step", step_counter)
@@ -521,6 +524,7 @@ def fsdp_main(args, logger):
         mem_reserved_tracker = []
 
     train_start_time_s = time.perf_counter()
+    monitor = Monitor()
     for epoch in range(1, epochs + 1):
         if rank == 0:
             t0 = time.time()
@@ -537,6 +541,7 @@ def fsdp_main(args, logger):
             epoch=epoch,
             epoch_start_time_s=epoch_start_time_s,
             train_start_time_s=train_start_time_s,
+            monitor=monitor,
             sampler=sampler1,
             profiler=torch_profiler,
             scaler=scaler,

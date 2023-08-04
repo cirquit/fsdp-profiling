@@ -30,7 +30,7 @@ class benchmark_config:
     print_sharding_plan: bool = False
 
     # dataloaders
-    num_workers_dataloader: int = 0
+    num_workers_dataloader: int = 4
 
     # policies
     fsdp_unit_size = 1000000
