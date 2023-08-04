@@ -200,6 +200,8 @@ def train(
     train_loader,
     optimizer,
     epoch,
+    epoch_start_time_s,
+    train_start_time_s,
     sampler=None,
     profiler=None,
     scaler=None,
@@ -217,7 +219,7 @@ def train(
 
     # starting timer for dataload due to iterator
     step_time_start_s = time.perf_counter()
-
+    step_counter = 0
     for batch in train_loader:
         dataload_time_s = time.perf_counter() - step_time_start_s
 
@@ -255,6 +257,7 @@ def train(
 
         logger.log("01_general/loss", loss)
         logger.log("01_general/epoch", epoch)
+        logger.log("01_general/step", step_counter)
         logger.log("02_timing/dataload_time_s", dataload_time_s)
         logger.log("02_timing/calculated_step_time_s",
             dataload_time_s + \
@@ -266,23 +269,22 @@ def train(
         # restarting timer for dataload due to iterator
         actual_step_time_s = time.perf_counter() - step_time_start_s
         step_time_start_s = time.perf_counter()
-        logger.log("02_timing/actual_step_time_s", actual_step_time_s, commit=True)
+        # delta time for epoch and training for easier parsing
+        running_epoch_time_s = step_time_start_s - epoch_start_time_s
+        running_train_time_s = step_time_start_s - train_start_time_s
+        logger.log("02_timing/actual_step_time_s", actual_step_time_s)
+        logger.log("02_timing/running_epoch_time_s", running_epoch_time_s)
+        logger.log("02_timing/running_training_time_s", running_train_time_s, commit=True)
+        step_counter += 1
 
     dist.all_reduce(ddp_loss, op=dist.ReduceOp.SUM)
-
     train_accuracy = ddp_loss[0] / ddp_loss[1]
     if rank == 0:
         inner_pbar.close()
-
-    #    print(
-    #        f"Train Epoch: \t{epoch}, Loss: \t{train_accuracy:.4f}"
-    #    )  # .format(epoch, train_accuracy))
     return train_accuracy
 
 
 # ---- Validation ---------------
-
-
 def validation(cfg, model, local_rank, rank, world_size, test_loader, scaler):
     model.eval()
     correct = 0
@@ -341,7 +343,6 @@ def fsdp_main(args, logger):
     if rank == 0:
         print(f"--> running with these defaults {cfg}")
         time_of_run = get_date_of_run()
-        logger.log_hparams(hparams=vars(cfg))
 
     setup_tasks(rank, world_size, cfg)
 
@@ -519,11 +520,12 @@ def fsdp_main(args, logger):
         mem_alloc_tracker = []
         mem_reserved_tracker = []
 
+    train_start_time_s = time.perf_counter()
     for epoch in range(1, epochs + 1):
         if rank == 0:
-            print(f"\n--> Starting Epoch {epoch}")
-
             t0 = time.time()
+
+        epoch_start_time_s = time.perf_counter()
         train_accuracy = train(
             cfg,
             model,
@@ -532,7 +534,9 @@ def fsdp_main(args, logger):
             world_size,
             train_loader,
             optimizer,
-            epoch,
+            epoch=epoch,
+            epoch_start_time_s=epoch_start_time_s,
+            train_start_time_s=train_start_time_s,
             sampler=sampler1,
             profiler=torch_profiler,
             scaler=scaler,

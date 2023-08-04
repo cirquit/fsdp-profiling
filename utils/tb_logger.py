@@ -36,19 +36,13 @@ class TBLogger():
         """ """
         self._log_counter += 1
 
-    def log_hparams(self, hparams={}, metrics={}):
-        """Only logged from the main process. Marked with 'main' as
-        TB visualization is otherwise not nice."""
-        self._logger.add_hparams(hparam_dict=hparams,
-                                 metric_dict=metrics,
-                                 run_name="main")
-
     def log(self, name, value, commit=False):
         """ Wrapper around scalar logger with automatic move between cpu/gpu
         """
         if type(value) == torch.Tensor:
             if value.device.type != "cpu":
                 value = value.to("cpu")
+                value = value.to(torch.float32)
         self._logger.add_scalar(
             tag=name,
             scalar_value=value,
