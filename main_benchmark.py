@@ -338,7 +338,7 @@ def fsdp_main(args, logger):
     """main process within each process"""
     cfg = config.benchmark_config()  # loads from defaults
     log_config(logger=logger, cfg=cfg)
-    monitor = Monitor()
+    monitor = Monitor(cuda_enabled=True)
     logger.log_dict(monitor.get_static_info())
 
     torch.manual_seed(cfg.seed)

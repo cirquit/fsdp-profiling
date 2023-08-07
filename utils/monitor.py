@@ -22,7 +22,10 @@ def start_monitor(monitor_log_frequency_ms):
     t.start()
 
 class Monitor:
-    def __init__(self):
+    def __init__(self, cuda_enabled=False):
+
+        # 
+        self.cuda_enabled=cuda_enabled
 
         # setting up t-1 values for bandwidth calculation
         self.disk_read_sys_mb, self.disk_write_sys_mb = 0, 0
@@ -64,6 +67,10 @@ class Monitor:
         disk_info = self.get_disk_info()
         net_info = self.get_network_info()
         bandwidth_info = self.get_bandwidths(disk_info=disk_info, net_info=net_info)
+        if self.cuda_enabled:
+            gpu_info = self.get_cuda_memory_info()
+        else:
+            gpu_info = {}
 
         # remove the global counters
         del disk_info["disk/disk_read_sys_MB"]
@@ -78,6 +85,7 @@ class Monitor:
             **disk_info,
             **net_info,
             **bandwidth_info,
+            **gpu_info
         }
 
     def create_disk_access_snapshot(self):
@@ -317,3 +325,40 @@ class Monitor:
             "network/net_sent_sys_mbit": net_sent_sys_mbit,
             "network/net_recv_sys_mbit": net_recv_sys_mbit,
         }
+
+    @staticmethod
+    def get_cuda_memory_info():
+        # cuda memory stats
+        # https://pytorch.org/docs/stable/generated/torch.cuda.memory_stats.html#torch.cuda.memory_stats
+        import torch
+        gpu_key = "03_gpu/"
+        memory_summary_dict = torch.cuda.memory_stats()
+        return_dict = {}
+        for key in memory_summary_dict.keys():
+            if "bytes" in key:
+                return_key = gpu_key + key.replace("bytes", "mb")
+                value = memory_summary_dict[key] / 1000*2
+            elif "allocated" in key:
+                return_key = gpu_key + key.replace("allocated", "current")
+                value = memory_summary_dict[key]
+            else:
+                return_key = gpu_key + key
+                value = memory_summary_dict[key]
+
+            return_dict[return_key] = value
+
+        return_dict["04_agg_gpu/avg_segment_size_current_mb"] = \
+            memory_summary_dict["requested_bytes.all.current"] / \
+            memory_summary_dict["segment.all.current"]
+        return_dict["04_agg_gpu/avg_block_size_current_mb"] = \
+            memory_summary_dict["active_bytes.all.current"] / \
+            memory_summary_dict["active.all.current"]
+        return_dict["04_agg_gpu/avg_inactive_block_size_current_mb"] = \
+            memory_summary_dict["inactive_split_bytes.all.current"] / \
+            memory_summary_dict["inactive_split.all.current"]
+
+        return {
+            **return_dict
+        }
+
+
