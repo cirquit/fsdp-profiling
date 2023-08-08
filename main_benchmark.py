@@ -85,15 +85,6 @@ g_addr = "localhost"
 def _is_rank_0():
     return 0 == os.getenv("RANK")
 
-def get_date_of_run():
-    """create date and time for file save uniqueness
-    example: 2022-05-07-08:31:12_PM'
-    """
-    date_of_run = datetime.now().strftime("%Y-%m-%d-%I:%M:%S_%p")
-    print(f"--> current date and time of run = {date_of_run}")
-    return date_of_run
-
-
 def parse_args():
     parser = argparse.ArgumentParser(description="PyTorch fsdp T5.11 Example")
     parser.add_argument("--save-dir", default="/model_chkpt", type=str)
@@ -134,15 +125,15 @@ def get_policies(cfg):
 
         if bf16_ready and not cfg.use_fp16:
             mixed_precision_policy = policies.bfSixteen
-            print(f"bFloat16 enabled for mixed precision - using bfSixteen policy")
+            print(f"Precision: BF16")
         elif cfg.use_fp16:
             mixed_precision_policy = policies.fpSixteen
-            print(f"FP16 enabled. ")
+            print(f"Precision: FP16")
         else:
             # mixed_precision_policy = policies.fpSixteen
-            print(
-                f"bFloat16 support not present. Will use FP32, and not mixed precision"
-            )
+            print(f"Precision: FP32 (mixed requested, not possible)")
+    else:
+        print(f"Precision: FP32 (default)")
 
     # wrapping policy -------
     # print(f"**overriding mp to fp16 - remove")
@@ -162,14 +153,11 @@ def setup(rank, world_size, cfg):
 
 
 def setup_environ_flags(cfg, rank):
-
-    print("\n--> Setting environment policies....\n")
     os.environ["TORCH_SHOW_CPP_STACKTRACES"] = str(1)
     if cfg.nccl_debug_handler:
         os.environ["NCCL_ASYNC_ERROR_HANDLING"] = str(1)
     if cfg.distributed_debug:
         os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
-        print(f"--> running with torch dist debug set to detail, rank {rank}")
     os.environ["NCCL_DEBUG"] = "WARN"
     os.environ["PYTHONFAULTHANDLER"] = str(1)
 
@@ -179,8 +167,8 @@ def cleanup():
 
 
 def clear_gpu_cache(rank=None):
-    print(f"clearing cache for rank {rank}")
     torch.cuda.empty_cache()
+    print(f"Rank {rank}: Cleared GPU cache")
 
 
 def setup_tasks(rank, world_size, cfg):
@@ -221,7 +209,7 @@ def train(
 
     # starting timer for dataload due to iterator
     step_time_start_s = time.perf_counter()
-    step_counter = 0
+    step_counter = 1
     for batch in train_loader:
         dataload_time_s = time.perf_counter() - step_time_start_s
 
@@ -349,19 +337,12 @@ def fsdp_main(args, logger):
     rank = int(os.environ["RANK"])
     world_size = int(os.environ["WORLD_SIZE"])
 
-    if rank == 0:
-        print(f"--> running with these defaults {cfg}")
-        time_of_run = get_date_of_run()
-
     setup_tasks(rank, world_size, cfg)
 
-    print(f"settings for NCCL = {os.getenv('NCCL_DEBUG')}")
+    print(f"Rank {rank}: NCCL ENV = {os.getenv('NCCL_DEBUG')}")
 
     fsdp_unit_params = cfg.fsdp_unit_size
     batch_size = cfg.batch_size
-    if rank == 0:
-        print(f"\n BatchSize = {batch_size}\n")
-
     val_batch_size = cfg.val_batch_size
 
     scaler = None  # only used for fp16
@@ -370,13 +351,9 @@ def fsdp_main(args, logger):
 
     if cfg.use_fp16:
         from torch.distributed.fsdp.sharded_grad_scaler import ShardedGradScaler
-
         scaler = ShardedGradScaler()
 
     model_name = cfg.model_name  # "google/t5-v1_1-small"  #   #
-    if rank == 0:
-        print(f"--> training for model {model_name}")
-
     printable_model_name = str.replace(model_name, "/", "=")
     save_name = model_name + "-"
 
@@ -397,12 +374,7 @@ def fsdp_main(args, logger):
     # tokenizer = T5Tokenizer.from_pretrained(model_name)
     # dataset_name = "jfleg_train.csv"
 
-    if rank == 0:
-        print(f"--> Training for {model_name}")
-        total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        print(f"\n--> {model_name} has {total_params/1e6} Million params\n")
-
-        # print(f"{dataset_name} contains: {dataset.keys()}")
+            # print(f"{dataset_name} contains: {dataset.keys()}")
         # print("Size of {dataset_name} train dataset: ", dataset["train"].shape)
         # print(
         #    "Size of {dataset_name} Validation dataset: ", dataset["validation"].shape
@@ -415,20 +387,16 @@ def fsdp_main(args, logger):
 
     train_dataset = dg.get_dataset(tokenizer, train_name, 512, 512, True)
     if 0 == os.getenv("RANK"):
-        print(f"--> Training Set Len = {len(train_dataset)}")
-        print(f"using dataset {train_name}")
+        print(f"Train {train_name} = {len(train_dataset)} samples")
 
     val_dataset = dg.get_dataset(tokenizer, cfg.dataset_test, 512, 512, True)
     if 0 == os.getenv("RANK"):
-        print(f"--> Validation set len = {len(val_dataset)}")
-        print(f"using dataset {cfg.dataset_test}")
+        print(f"Val {cfg.dataset_test} = {len(val_dataset)} samples")
 
     sampler1 = DistributedSampler(
         train_dataset, rank=rank, num_replicas=world_size, shuffle=True
     )
     sampler2 = DistributedSampler(val_dataset, rank=rank, num_replicas=world_size)
-
-    print(f"batch size = {batch_size}")
 
     train_kwargs = {"batch_size": batch_size, "sampler": sampler1}
     test_kwargs = {"batch_size": val_batch_size, "sampler": sampler2}
@@ -460,23 +428,11 @@ def fsdp_main(args, logger):
     if cfg.fsdp_activation_checkpointing:
         policies.apply_checkpointing(model)
 
-    if rank == 0 and cfg.print_sharding_plan:
-        print(f"model ")
-        fn = printable_model_name + "-sharded_layout.txt"
-        with open(fn, "w") as external_file:
-            header_text = (
-                f"model = {model_name}, sharded with {fsdp_unit_params} parameters\n"
-            )
-            print(header_text, file=external_file)
-            total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-            milli_params = total_params * 4 / 1e6
-            print(
-                f"\n--> {model_name} has {milli_params} Million params\n",
-                file=external_file,
-            )
-            print(f"model wrapping = \n{model}\n\n", file=external_file)
-
-            external_file.close()
+    if rank == 0:
+        total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        milli_params = round(total_params / 1e6, 2)
+        fsdp_unit_params_mil = round(fsdp_unit_params / 1e6, 2)
+        print(f"{model_name}: {milli_params}M, sharded with {fsdp_unit_params_mil}M parameters")
 
     lr = 0.0008
     gamma = 0.85
@@ -490,24 +446,13 @@ def fsdp_main(args, logger):
         )
     else:
         optimizer = optim.AdamW(model.parameters(), lr=lr)
-        if rank==0:
-            print(f"--> optimizer is AdamW")
 
     scheduler = StepLR(optimizer, step_size=1, gamma=gamma)
     epochs = cfg.num_epochs
-    if rank == 0:
-        print(f"Training for {epochs} epochs")
 
     best_train_accuracy = float("-inf")
     best_val_loss = float("inf")
     curr_val_loss = float("inf")
-
-    # --- main training loop - todo, this needs to be modularized
-    if rank == 0:
-        dur = []
-        train_acc_tracking = []
-        val_acc_tracking = []
-        training_start_time = time.time()
 
     torch_profiler = None
     """with torch.profiler.profile(
@@ -524,11 +469,6 @@ def fsdp_main(args, logger):
         record_shapes=True,
     ) as torch_profiler:
     """
-    if rank == 0 and cfg.track_memory:
-        fn = cfg.model_name + "memory_tracking.txt"
-        mem_alloc_tracker = []
-        mem_reserved_tracker = []
-
     train_start_time_s = time.perf_counter()
 
     for epoch in range(1, epochs + 1):
@@ -555,8 +495,8 @@ def fsdp_main(args, logger):
         )
         if cfg.block_for_validation:
             dist.barrier()
-            if rank == 0:
-                print(f"--> blocking ranks for pre-validation synching...")
+            #if rank == 0:
+            #    print(f"--> blocking ranks for pre-validation synching...")
 
         if cfg.run_validation:
             curr_val_loss = validation(
@@ -565,51 +505,8 @@ def fsdp_main(args, logger):
 
         scheduler.step()
 
-        if rank == 0:
-            print(f"--> epoch {epoch} completed...entering save and stats zone")
-
-            dur.append(time.time() - t0)
-            train_acc_tracking.append(train_accuracy.item())
-
-            if cfg.run_validation:
-                val_acc_tracking.append(curr_val_loss.item())
-
-            if cfg.track_memory:
-                mem_alloc_tracker.append(torch.cuda.memory_allocated())
-                mem_reserved_tracker.append(torch.cuda.memory_reserved())
-
-        # announce new val loss record:
-        if rank == 0 and curr_val_loss < best_val_loss:
-
-            best_val_loss = curr_val_loss
-            print(f"-->>>> New Val Loss Record: {best_val_loss}")
-
     # init_end_event.record()
-    if rank == 0:
-        # inner_pbar.close()
-        total_training_time = time.time() - training_start_time
-        print(f"Total training time = {total_training_time:.2f}")
-        print("Times per epoch:")
-        for i, val in enumerate(dur):
-            print(f"epoch {i}, time {val:.2f}")
-        print()
-
-        # memory
-        if cfg.track_memory:
-            print(f"total memory reserved: {mem_reserved_tracker}")
-            print(f"total memory allocated: {mem_alloc_tracker}")
-
-        print(f"Training accuracy: {train_acc_tracking}")
-        if cfg.run_validation:
-            print(f"Validation accuracy: {val_acc_tracking}")
-            print(f"\n Best Val accuracy: {best_val_loss}")
-
-        # memory summary
-        if cfg.memory_report and rank == 0:
-            print(
-                f"CUDA Memory Summary After Last training:\n {torch.cuda.memory_summary()}"
-            )
-
+    # inner_pbar.close()
     dist.barrier()
     cleanup()
 

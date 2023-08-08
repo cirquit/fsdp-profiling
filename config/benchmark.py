@@ -35,7 +35,7 @@ class benchmark_config:
     # policies
     fsdp_unit_size = 1000000
     use_mixed_precision: bool = True
-    use_fp16: bool = False
+    use_fp16: bool = True
 
     hf_activation_checkpointing: bool = False
     fsdp_activation_checkpointing: bool = False
@@ -46,7 +46,7 @@ class benchmark_config:
 
     # training
     batch_size: int = 8
-    num_epochs: int = 1
+    num_epochs: int = 3
 
     # validation
     run_validation: bool = False
