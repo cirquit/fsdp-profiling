@@ -264,6 +264,8 @@ def train(
         running_epoch_time_s = step_time_start_s - epoch_start_time_s
         running_train_time_s = step_time_start_s - train_start_time_s
         logger.log("02_timing/actual_step_time_s", actual_step_time_s)
+        samples_per_second = cfg.batch_size / actual_step_time_s
+        logger.log("01_general/sps", samples_per_second)
         logger.log("02_timing/running_epoch_time_s", running_epoch_time_s)
         logger.log("02_timing/running_training_time_s", running_train_time_s, commit=True)
         step_counter += 1
