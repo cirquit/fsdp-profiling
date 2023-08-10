@@ -212,6 +212,8 @@ def train(
     step_counter = 1
     for batch in train_loader:
         dataload_time_s = time.perf_counter() - step_time_start_s
+        # calculate for tokens/s
+        token_count = sum([len(e) for e in batch["source_ids"]])
 
         with timeit("dataload_cuda_mode", logger) as dataload_cuda_move_timer:
             for key in batch.keys():
@@ -265,7 +267,9 @@ def train(
         running_train_time_s = step_time_start_s - train_start_time_s
         logger.log("02_timing/actual_step_time_s", actual_step_time_s)
         samples_per_second = cfg.batch_size / actual_step_time_s
+        tokens_per_second = token_count / actual_step_time_s
         logger.log("01_general/sps", samples_per_second)
+        logger.log("01_general/tokens_per_s", tokens_per_second)
         logger.log("02_timing/running_epoch_time_s", running_epoch_time_s)
         logger.log("02_timing/running_training_time_s", running_train_time_s, commit=True)
         step_counter += 1
