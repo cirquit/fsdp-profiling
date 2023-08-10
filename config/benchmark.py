@@ -47,6 +47,7 @@ class benchmark_config:
     # training
     batch_size: int = 8
     num_epochs: int = 1
+    max_step_count: int = 100
 
     # validation
     run_validation: bool = False

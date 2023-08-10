@@ -204,7 +204,7 @@ def train(
         sampler.set_epoch(epoch)
     if rank == 0:
         inner_pbar = tqdm.tqdm(
-            range(len(train_loader)), colour="blue", desc="Training Epoch"
+            range(cfg.max_step_count), colour="blue", desc="Training Epoch"
         )
 
     # starting timer for dataload due to iterator
@@ -273,6 +273,12 @@ def train(
         logger.log("02_timing/running_epoch_time_s", running_epoch_time_s)
         logger.log("02_timing/running_training_time_s", running_train_time_s, commit=True)
         step_counter += 1
+
+        # we're currently only interested in the first few steps for profiling!
+        if step_counter >= cfg.max_step_count:
+            if rank == 0:
+                print(f"Early stopping with {cfg.max_step_count=}")
+            break
 
     dist.all_reduce(ddp_loss, op=dist.ReduceOp.SUM)
     train_accuracy = ddp_loss[0] / ddp_loss[1]
