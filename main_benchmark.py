@@ -24,16 +24,24 @@ import torch.optim as optim
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 # for generation
+from transformers.models.t5.modeling_t5 import T5Block
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 from transformers import DataCollatorForSeq2Seq
 
 import functools
+from functools import partial
 from torch.optim.lr_scheduler import StepLR
 import torch.nn.functional as F
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
+from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+    checkpoint_wrapper,
+    CheckpointImpl,
+    apply_activation_checkpointing,
+)
+
 
 from torch.distributed.fsdp import (
     FullyShardedDataParallel as FSDP,
@@ -435,25 +443,43 @@ def fsdp_main(args, logger):
     torch.cuda.set_device(local_rank)
     clear_gpu_cache(local_rank)
 
-    if cfg.hf_activation_checkpointing:
-        model.gradient_checkpointing_enable()
-        print(f"HF Activation checkpointing enabled\n")
+    if cfg.sharding_strategy == "NO_SHARD":
+        sharding_strategy = ShardingStrategy.NO_SHARD
+    elif cfg.sharding_strategy == "SHARD_GRAD_OP":
+        sharding_strategy = ShardingStrategy.SHARD_GRAD_OP
+    elif cfg.sharding_strategy == "HYBRID_SHARD":
+        sharding_strategy = ShardingStrategy.HYBRID_SHARD
+    else:
+        sharding_strategy = ShardingStrategy.FULL_SHARD
 
     model = FSDP(
         model,
         auto_wrap_policy=wrapping_policy,
         mixed_precision=mp_policy,
         device_id=torch.cuda.current_device(),
+        sharding_strategy=sharding_strategy,
     )
 
     if cfg.fsdp_activation_checkpointing:
-        policies.apply_checkpointing(model)
+        auto_wrap_policy = functools.partial(
+            transformer_auto_wrap_policy,
+            transformer_layer_cls={T5Block}
+        )
+        non_reentrant_wrapper = functools.partial(
+            checkpoint_wrapper,
+            checkpoint_impl=CheckpointImpl.NO_REENTRANT
+        )
+        apply_activation_checkpointing(
+            model,
+            checkpoint_wrapper_fn=non_reentrant_wrapper,
+            auto_wrap_policy=auto_wrap_policy
+        )
+
 
     if rank == 0:
         total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         milli_params = round(total_params / 1e6, 2)
-        fsdp_unit_params_mil = round(fsdp_unit_params / 1e6, 2)
-        print(f"{model_name}: {milli_params}M, sharded with {fsdp_unit_params_mil}M parameters")
+        print(f"{model_name}: {milli_params}M")
 
     lr = 0.0008
     gamma = 0.85

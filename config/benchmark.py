@@ -6,7 +6,6 @@
 
 from dataclasses import dataclass
 
-
 @dataclass
 class benchmark_config:
     # general
@@ -16,8 +15,8 @@ class benchmark_config:
     seed: int = 2022
 
     # model
-    model_name = "t5-small"  # "google/t5-v1_1-small"
-    tokenizer = "t5-large"
+    model_name: str = "t5-large"  # "google/t5-v1_1-small"
+    tokenizer: str = "t5-large"
     # available models
     ## t5-base
     # google/t5-v1_1-small
@@ -26,7 +25,7 @@ class benchmark_config:
     # google/t5-v1_1-xl  #3b
     # google/t5-v1_1-xxl #11b
     save_model: bool = False
-    model_checkpoint = "t5_small_save.pt"
+    model_checkpoint: str = "t5_small_save.pt"
     print_sharding_plan: bool = False
 
     # dataloaders
@@ -36,9 +35,12 @@ class benchmark_config:
     fsdp_unit_size = 1000000
     use_mixed_precision: bool = True
     use_fp16: bool = True
+    #sharding_strategy: str = "HYBRID_SHARD"   # sharing withing each node, but DDP between nodes
+    sharding_strategy: str = "NO_SHARD"       # DDP Mode - each GPU keeps full copy of everything
+    #sharding_strategy: str = "SHARD_GRAD_OP"  # Zero2 Mode - model parameters are not freed after forward pass
+    #sharding_strategy: str = "FULL_SHARD"     # default - model, optim, grads are sharded
 
-    hf_activation_checkpointing: bool = False
-    fsdp_activation_checkpointing: bool = False
+    fsdp_activation_checkpointing: bool = True
 
     # datasets
     dataset_train = "datasets_grammar/grammar_train.csv"
@@ -48,10 +50,9 @@ class benchmark_config:
     batch_size: int = 4
     num_epochs: int = 1
     max_step_count: int = 100
-
     # validation
     run_validation: bool = False
-    val_batch_size = 4
+    val_batch_size: int = 4
     block_for_validation: bool = False
 
     # logging
