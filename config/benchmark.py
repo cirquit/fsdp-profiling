@@ -32,7 +32,6 @@ class benchmark_config:
     num_workers_dataloader: int = 4
 
     # policies
-    fsdp_unit_size = 1000000
     use_mixed_precision: bool = True
     use_fp16: bool = True
     #sharding_strategy: str = "HYBRID_SHARD"   # sharing withing each node, but DDP between nodes
@@ -40,7 +39,7 @@ class benchmark_config:
     #sharding_strategy: str = "SHARD_GRAD_OP"  # Zero2 Mode - model parameters are not freed after forward pass
     #sharding_strategy: str = "FULL_SHARD"     # default - model, optim, grads are sharded
 
-    fsdp_activation_checkpointing: bool = True
+    fsdp_activation_checkpointing: bool = False
 
     # datasets
     dataset_train = "datasets_grammar/grammar_train.csv"

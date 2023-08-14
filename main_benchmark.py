@@ -133,15 +133,20 @@ def get_policies(cfg):
 
         if bf16_ready and not cfg.use_fp16:
             mixed_precision_policy = policies.bfSixteen
-            print(f"Precision: BF16")
+            if _is_rank_0():
+                print(f"Precision: BF16 (param, grad, buffer)")
         elif cfg.use_fp16:
             mixed_precision_policy = policies.fpSixteen
-            print(f"Precision: FP16")
+            if _is_rank_0():
+                print(f"Precision: FP16 (param, grad, buffer)")
         else:
-            # mixed_precision_policy = policies.fpSixteen
-            print(f"Precision: FP32 (mixed requested, not possible)")
+            mixed_precision_policy = policies.fp32_policy
+            if _is_rank_0():
+                print(f"Precision: FP32 (para, grad, buffer)")
     else:
-        print(f"Precision: FP32 (default)")
+        mixed_precision_policy = policies.fp32_policy
+        if _is_rank_0():
+           print(f"Precision: FP32 (default)")
 
     # wrapping policy -------
     # print(f"**overriding mp to fp16 - remove")
@@ -166,7 +171,7 @@ def setup_environ_flags(cfg, rank):
         os.environ["NCCL_ASYNC_ERROR_HANDLING"] = str(1)
     if cfg.distributed_debug:
         os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
-    os.environ["NCCL_DEBUG"] = "WARN"
+    #os.environ["NCCL_DEBUG"] = "WARN"
     os.environ["PYTHONFAULTHANDLER"] = str(1)
 
 
@@ -368,9 +373,8 @@ def fsdp_main(args, logger):
 
     setup_tasks(rank, world_size, cfg)
 
-    print(f"Rank {rank}: NCCL ENV = {os.getenv('NCCL_DEBUG')}")
+    #print(f"Rank {rank}: NCCL ENV = {os.getenv('NCCL_DEBUG')}")
 
-    fsdp_unit_params = cfg.fsdp_unit_size
     batch_size = cfg.batch_size
     val_batch_size = cfg.val_batch_size
 
@@ -458,6 +462,7 @@ def fsdp_main(args, logger):
         mixed_precision=mp_policy,
         device_id=torch.cuda.current_device(),
         sharding_strategy=sharding_strategy,
+        use_orig_params=True
     )
 
     if cfg.fsdp_activation_checkpointing:
