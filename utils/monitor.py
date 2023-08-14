@@ -5,17 +5,18 @@ import psutil
 import threading
 import subprocess as sp
 import time
-from pynvml import nvmlInit, \
-    nvmlDeviceGetCount, \
-    nvmlDeviceGetHandleByIndex, \
-    nvmlSystemGetDriverVersion, \
-    nvmlDeviceGetName, \
-    nvmlDeviceGetPciInfo, \
-    nvmlDeviceGetVbiosVersion, \
-    nvmlDeviceGetMaxPcieLinkGeneration, \
-    nvmlDeviceGetCurrPcieLinkGeneration, \
-    nvmlDeviceGetMaxPcieLinkWidth, \
-    nvmlDeviceGetCurrPcieLinkWidth
+from pynvml import *
+    #nvmlInit, \
+    #nvmlDeviceGetCount, \
+    #nvmlDeviceGetHandleByIndex, \
+    #nvmlSystemGetDriverVersion, \
+    #nvmlDeviceGetName, \
+    #nvmlDeviceGetPciInfo, \
+    #nvmlDeviceGetVbiosVersion, \
+    #nvmlDeviceGetMaxPcieLinkGeneration, \
+    #nvmlDeviceGetCurrPcieLinkGeneration, \
+    #nvmlDeviceGetMaxPcieLinkWidth, \
+    #nvmlDeviceGetCurrPcieLinkWidth
 #import wandb
 
 #def start_monitor(monitor_log_frequency_ms):
@@ -64,6 +65,10 @@ class Monitor:
         self.create_interrupt_snapshot()
         self.create_disk_access_snapshot()
 
+    def __exit(self, exc_type, exc_value, traceback):
+        if self.cuda_enabled:
+            nvmlShutdown()
+
     def get_static_info(self):
         logical_core_count = psutil.cpu_count(logical=True)
         total_b, _, _, _, _, _, _, _, _, _, _ = psutil.virtual_memory()
@@ -106,9 +111,11 @@ class Monitor:
         net_info = self.get_network_info()
         bandwidth_info = self.get_bandwidths(disk_info=disk_info, net_info=net_info)
         if self.cuda_enabled:
-            gpu_info = self.get_cuda_memory_info()
+            gpu_mem_info = self.get_cuda_memory_info()
+            gpu_smi_info = self.get_nvidia_smi_info()
         else:
-            gpu_info = {}
+            gpu_mem_info = {}
+            gpu_smi_info = {}
 
         # remove the global counters
         del disk_info["disk/disk_read_sys_MB"]
@@ -123,7 +130,8 @@ class Monitor:
             **disk_info,
             **net_info,
             **bandwidth_info,
-            **gpu_info
+            **gpu_mem_info,
+            **gpu_smi_info
         }
 
     def create_disk_access_snapshot(self):
@@ -364,17 +372,66 @@ class Monitor:
             "network/net_recv_sys_mbit": net_recv_sys_mbit,
         }
 
-#    def get_nvidia_smi_info():
-#        from pynvml import *
-#        group_key = "05_gpu_general/"
+    def get_nvidia_smi_info(self):
+        return_dict = {}
 
+        for ix, handle in enumerate(self.gpu_handles):
+            group_key = f"05_gpu_smi/gpu_{ix}_"
 
-#        return_dict = {}
+            # https://man.archlinux.org/man/nvidia-smi.1.en
+            # actual memory on the device
+            frameBufferMemInfo = nvmlDeviceGetMemoryInfo(handle)
+            fb_mem_total_MiB = frameBufferMemInfo.total / 1024 / 1024
+            fb_mem_used_MiB = frameBufferMemInfo.used / 1024 / 1024
+            fb_mem_free_MiB = fb_mem_total_MiB - fb_mem_used_MiB
+            return_dict[group_key + "fb_total_MiB"] = fb_mem_total_MiB
+            return_dict[group_key + "fb_used_MiB"] = fb_mem_used_MiB
+            return_dict[group_key + "fb_free_MiB"] = fb_mem_free_MiB
 
+            # mapped FB memory to be accessed by the CPU via P2P over the PCIe bus
+            bar1MemInfo = nvmlDeviceGetBAR1MemoryInfo(handle)
+            bar1_mem_total_MiB = bar1MemInfo.bar1Total / 1024 / 1024
+            bar1_mem_used_MiB = bar1MemInfo.bar1Used / 1024 / 1024
+            bar1_mem_free_MiB = bar1_mem_total_MiB - bar1_mem_used_MiB
+            return_dict[group_key + "bar1_total_MiB"] = bar1_mem_total_MiB
+            return_dict[group_key + "bar1_used_MiB"] = bar1_mem_used_MiB
+            return_dict[group_key + "bar1_free_MiB"] = bar1_mem_free_MiB
 
- #       return {
- #           **return_dict
- #       }
+            # device utilization
+            utilization = nvmlDeviceGetUtilizationRates(handle)
+            return_dict[group_key + "gpu_util_in_percent"] = utilization.gpu
+            return_dict[group_key + "mem_util_in_percent"] = utilization.memory
+
+            # device temperature
+            temp_in_c = nvmlDeviceGetTemperature(handle, NVML_TEMPERATURE_GPU)
+            return_dict[group_key + "temp_in_C"] = temp_in_c
+
+            # https://docs.nvidia.com/deploy/nvml-api/group__nvmlClocksThrottleReasons.html
+            # throttle reasons, logged in a binary fashion to plot them against each other
+            throttleReasons = [
+                [nvmlClocksThrottleReasonGpuIdle, \
+                    "clocks_throttle_reason_gpu_idle"],
+                [nvmlClocksThrottleReasonUserDefinedClocks, \
+                    "clocks_throttle_reason_user_defined_clocks"],
+                [nvmlClocksThrottleReasonApplicationsClocksSetting, \
+                    "clocks_throttle_reason_applications_clocks_setting"],
+                [nvmlClocksThrottleReasonSwPowerCap, \
+                    "clocks_throttle_reason_sw_power_cap"],
+                [nvmlClocksThrottleReasonHwSlowdown, \
+                    "clocks_throttle_reason_hw_slowdown"],
+            ];
+            supportedClocksThrottleReasons = \
+                nvmlDeviceGetSupportedClocksThrottleReasons(handle);
+            clocksThrottleReasons = nvmlDeviceGetCurrentClocksThrottleReasons(handle);
+            for (mask, name) in throttleReasons:
+                if (name != "clocks_throttle_reason_user_defined_clocks"):
+                    if (mask & supportedClocksThrottleReasons):
+                        val = 1 if mask & clocksThrottleReasons else 0;
+                    return_dict[group_key + name] = val
+
+        return {
+            **return_dict
+        }
 
 
 

@@ -16,7 +16,7 @@ class benchmark_config:
     seed: int = 2022
 
     # model
-    model_name = "t5-large"  # "google/t5-v1_1-small"
+    model_name = "t5-small"  # "google/t5-v1_1-small"
     tokenizer = "t5-large"
     # available models
     ## t5-base
