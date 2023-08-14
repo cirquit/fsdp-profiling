@@ -5,27 +5,44 @@ import psutil
 import threading
 import subprocess as sp
 import time
+from pynvml import nvmlInit, \
+    nvmlDeviceGetCount, \
+    nvmlDeviceGetHandleByIndex, \
+    nvmlSystemGetDriverVersion, \
+    nvmlDeviceGetName, \
+    nvmlDeviceGetPciInfo, \
+    nvmlDeviceGetVbiosVersion, \
+    nvmlDeviceGetMaxPcieLinkGeneration, \
+    nvmlDeviceGetCurrPcieLinkGeneration, \
+    nvmlDeviceGetMaxPcieLinkWidth, \
+    nvmlDeviceGetCurrPcieLinkWidth
+#import wandb
 
-import wandb
+#def start_monitor(monitor_log_frequency_ms):
+#    def inner():
+#        mon = Monitor()
+#        wandb.log(mon.get_static_info())
+#        monitor_log_frequency_s = monitor_log_frequency_ms / 1000
+#        while True:
+#            wandb.log({**mon.get_sys_info()})
+#            time.sleep(monitor_log_frequency_s)
 
-def start_monitor(monitor_log_frequency_ms):
-    def inner():
-        mon = Monitor()
-        wandb.log(mon.get_static_info())
-        monitor_log_frequency_s = monitor_log_frequency_ms / 1000
-        while True:
-            wandb.log({**mon.get_sys_info()})
-            time.sleep(monitor_log_frequency_s)
-
-    t = threading.Thread(target=inner)
-    t.daemon = True
-    t.start()
+#    t = threading.Thread(target=inner)
+#    t.daemon = True
+#    t.start()
 
 class Monitor:
     def __init__(self, cuda_enabled=False):
 
         # 
         self.cuda_enabled=cuda_enabled
+        self.gpus_attached=0
+        self.gpu_handles=[]
+        if self.cuda_enabled:
+            nvmlInit()
+            self.gpus_attached = nvmlDeviceGetCount()
+            for ix in range(self.gpus_attached):
+                self.gpu_handles.append(nvmlDeviceGetHandleByIndex(ix))
 
         # setting up t-1 values for bandwidth calculation
         self.disk_read_sys_mb, self.disk_write_sys_mb = 0, 0
@@ -52,9 +69,30 @@ class Monitor:
         total_b, _, _, _, _, _, _, _, _, _, _ = psutil.virtual_memory()
         total_memory_sys_MB = total_b / 1000**2
 
+        cuda_dict = {}
+        if self.cuda_enabled:
+            cuda_dict["gpu_count"] = str(nvmlDeviceGetCount())
+            cuda_dict["driver_version"] = str(nvmlSystemGetDriverVersion())
+            for ix, handle in enumerate(self.gpu_handles):
+                cuda_dict[f"gpu_{ix}_name"] = \
+                    str(nvmlDeviceGetName(handle))
+                cuda_dict[f"gpu_{ix}_id"] = \
+                    str(nvmlDeviceGetPciInfo(handle).busId)
+                cuda_dict[f"gpu_{ix}_vbios_version"] = \
+                    str(nvmlDeviceGetVbiosVersion(handle))
+                cuda_dict[f"gpu_{ix}_pci_max_link"] = \
+                    str(nvmlDeviceGetMaxPcieLinkGeneration(handle))
+                cuda_dict[f"gpu_{ix}_pci_cur_link"] = \
+                    str(nvmlDeviceGetCurrPcieLinkGeneration(handle))
+                cuda_dict[f"gpu_{ix}_pci_max_link_width"] = \
+                    str(nvmlDeviceGetMaxPcieLinkWidth(handle))
+                cuda_dict[f"gpu_{ix}_pci_cur_link_width"] = \
+                    str(nvmlDeviceGetCurrPcieLinkWidth(handle))
+
         return {
-            "cpu/logical_core_count": logical_core_count,
-            "memory/total_memory_sys_MB": total_memory_sys_MB,
+            **cuda_dict,
+            "cpu_core_count": logical_core_count,
+            "total_memory_sys_MB": total_memory_sys_MB,
         }
 
     def get_sys_info(self):
@@ -326,12 +364,26 @@ class Monitor:
             "network/net_recv_sys_mbit": net_recv_sys_mbit,
         }
 
+#    def get_nvidia_smi_info():
+#        from pynvml import *
+#        group_key = "05_gpu_general/"
+
+
+#        return_dict = {}
+
+
+ #       return {
+ #           **return_dict
+ #       }
+
+
+
     @staticmethod
     def get_cuda_memory_info():
         # cuda memory stats
         # https://pytorch.org/docs/stable/generated/torch.cuda.memory_stats.html#torch.cuda.memory_stats
         import torch
-        gpu_key = "03_gpu/"
+        gpu_key = "03_gpu_mem/"
         memory_summary_dict = torch.cuda.memory_stats()
         return_dict = {}
         for key in memory_summary_dict.keys():

@@ -16,7 +16,7 @@ class benchmark_config:
     seed: int = 2022
 
     # model
-    model_name = "t5-small"  # "google/t5-v1_1-small"
+    model_name = "t5-large"  # "google/t5-v1_1-small"
     tokenizer = "t5-large"
     # available models
     ## t5-base
@@ -45,7 +45,7 @@ class benchmark_config:
     dataset_test = "datasets_grammar/grammar_validation.csv"
 
     # training
-    batch_size: int = 8
+    batch_size: int = 4
     num_epochs: int = 1
     max_step_count: int = 100
 

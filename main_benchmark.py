@@ -68,8 +68,8 @@ from datetime import datetime
 # local imports
 import verify
 import policies
-from utils.monitor import Monitor
 from utils.tb_logger import TBLogger
+from utils.monitor import Monitor
 from utils.timers import TBTimeIt as timeit
 
 import datasets_grammar as dg
@@ -328,18 +328,27 @@ def validation(cfg, model, local_rank, rank, world_size, test_loader, scaler):
 
 
 def log_config(logger, cfg):
-    for key, value in vars(cfg).items():
-        logger.log_text(f"00_cfg/{key}", str(value))
+    for key, val in vars(cfg).items():
+        logger.log_text(f"00_cfg/{key}", str(val))
+
+def log_monitor_config(logger, monitor):
+    for key, val in monitor.get_static_info().items():
+        logger.log_text(f"00_cfg/{key}", str(val))
+    # log the version of torch nightly as well
+    logger.log_text(f"00_cfg/torch_version", str(torch.__version__))
+    major, mid, minor = torch.cuda.nccl.version()
+    logger.log_text(f"00_cfg/nccl_version", f"{major}.{mid}.{minor}")
+    logger.log_text(f"00_cfg/cuda_version", torch.version.cuda)
+
 
 # ---- fsdp main ------------------------------------------------------------
-
 
 def fsdp_main(args, logger):
     """main process within each process"""
     cfg = config.benchmark_config()  # loads from defaults
     log_config(logger=logger, cfg=cfg)
     monitor = Monitor(cuda_enabled=True)
-    logger.log_dict(monitor.get_static_info())
+    log_monitor_config(logger=logger, monitor=monitor)
 
     torch.manual_seed(cfg.seed)
     torch.cuda.manual_seed(cfg.seed)
@@ -530,6 +539,7 @@ if __name__ == "__main__":
 
     rank = int(os.environ["RANK"])
     run_name = f"{args.group_name}-r{rank}"
+
     with TBLogger(run_name=run_name) as logger:
         # torch run start
         fsdp_main(args, logger)
