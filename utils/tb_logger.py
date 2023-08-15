@@ -3,6 +3,24 @@ import traceback
 from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
 
+class NoOPLogger():
+    """ """
+
+    def __init__(self, run_name, log_path="./.tb_logs"):
+        return
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_value, tb):
+        return
+    def log(self, name, value, commit=False):
+        return
+    def log_dict(self, dict_values, commit=False):
+        return
+    def log_text(self, name, text, commit=False):
+        return
+    def flush(self):
+        return
+
 class TBLogger():
     """ """
 

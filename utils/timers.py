@@ -6,6 +6,26 @@ def cuda_sync():
     if torch.cuda.is_available():
         torch.cuda.synchronize()
 
+class NoOPTimeIt(object):
+    def __init__(
+        self,
+        name: str,
+        logger,
+        cuda: bool = False,
+        commit: bool = False,
+        verbose: bool = False
+    ):
+        return
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return
+
+    def delta_time_s(self):
+        return 0.0
+
 class TBTimeIt(object):
     def __init__(
         self, name: str, logger, cuda: bool = False, commit: bool = False, verbose: bool = False

@@ -35,11 +35,24 @@ class benchmark_config:
     use_mixed_precision: bool = True
     use_fp16: bool = True
     #sharding_strategy: str = "HYBRID_SHARD"   # sharing withing each node, but DDP between nodes
-    sharding_strategy: str = "NO_SHARD"       # DDP Mode - each GPU keeps full copy of everything
-    #sharding_strategy: str = "SHARD_GRAD_OP"  # Zero2 Mode - model parameters are not freed after forward pass
+    #sharding_strategy: str = "NO_SHARD"       # DDP Mode - each GPU keeps full copy of everything
+    sharding_strategy: str = "SHARD_GRAD_OP"  # Zero2 Mode - model parameters are not freed after forward pass
     #sharding_strategy: str = "FULL_SHARD"     # default - model, optim, grads are sharded
 
-    fsdp_activation_checkpointing: bool = False
+    # recompute feedforward when doing backward pass
+    fsdp_activation_checkpointing: bool = True
+
+    # gradient + parameters offloading to CPU memory 
+    cpu_offloading: bool = False
+
+    # logging (just some print statements)
+    nccl_debug_handler: bool = True
+    distributed_debug: bool = True
+    # create a memory snapshopt as a pickle at the specified step
+    memory_snapshotting: bool = True
+    memory_snapshot_step: int = 3
+    # enable torch profiler
+    enable_profiler: bool = True
 
     # datasets
     dataset_train = "datasets_grammar/grammar_train.csv"
@@ -48,21 +61,14 @@ class benchmark_config:
     # training
     batch_size: int = 4
     num_epochs: int = 1
-    max_step_count: int = 100
+    max_step_count: int = 4
     # validation
     run_validation: bool = False
     val_batch_size: int = 4
     block_for_validation: bool = False
 
-    # logging
-    track_memory = True
-    memory_report: bool = True
-    nccl_debug_handler: bool = True
-    distributed_debug: bool = True
-
     # Fine Tuning
     use_child_tuning: bool = False
-
     use_task_free: bool = False
     use_fisher_matrix: bool = False
     percent_F: float = 0.3
