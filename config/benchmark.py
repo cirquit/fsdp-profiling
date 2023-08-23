@@ -15,7 +15,7 @@ class benchmark_config:
     seed: int = 2022
 
     # model
-    model_name: str = "t5-large"  # "google/t5-v1_1-small"
+    model_name: str = "t5-3b"  # "google/t5-v1_1-small"
     tokenizer: str = "t5-large"
     # available models
     ## t5-base
@@ -36,8 +36,8 @@ class benchmark_config:
     use_fp16: bool = True
     #sharding_strategy: str = "HYBRID_SHARD"   # sharing withing each node, but DDP between nodes
     #sharding_strategy: str = "NO_SHARD"       # DDP Mode - each GPU keeps full copy of everything
-    sharding_strategy: str = "SHARD_GRAD_OP"  # Zero2 Mode - model parameters are not freed after forward pass
-    #sharding_strategy: str = "FULL_SHARD"     # default - model, optim, grads are sharded
+    sharding_strategy: str = "FULL_SHARD"     # default - model, optim, grads are sharded
+    #sharding_strategy: str = "SHARD_GRAD_OP"  # Zero2 Mode - model parameters are not freed after forward pass
 
     # recompute feedforward when doing backward pass
     fsdp_activation_checkpointing: bool = True
@@ -49,19 +49,19 @@ class benchmark_config:
     nccl_debug_handler: bool = True
     distributed_debug: bool = True
     # create a memory snapshopt as a pickle at the specified step
-    memory_snapshotting: bool = True
+    memory_snapshotting: bool = False
     memory_snapshot_step: int = 3
     # enable torch profiler
-    enable_profiler: bool = True
+    enable_profiler: bool = False
 
     # datasets
     dataset_train = "datasets_grammar/grammar_train.csv"
     dataset_test = "datasets_grammar/grammar_validation.csv"
 
     # training
-    batch_size: int = 4
+    batch_size: int = 30
     num_epochs: int = 1
-    max_step_count: int = 4
+    max_step_count: int = 20
     # validation
     run_validation: bool = False
     val_batch_size: int = 4

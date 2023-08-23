@@ -12,6 +12,9 @@ import os
 import argparse
 import datasets_grammar as dg
 
+#import nvidia_dlprof_pytorch_nvtx
+#nvidia_dlprof_pytorch_nvtx.init()
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -201,6 +204,8 @@ def train(
     # starting timer for dataload due to iterator
     step_time_start_s = time.perf_counter()
     step_counter = 1
+
+    #with torch.autograd.profiler.emit_nvtx():
     for batch in train_loader:
         dataload_time_s = time.perf_counter() - step_time_start_s
         # calculate for tokens/s
@@ -498,10 +503,10 @@ def fsdp_main(args, logger, run_name):
             ],
             schedule=torch.profiler.schedule(
                 wait=1,
-                warmup=2,
+                warmup=1,
                 active=1,
                 repeat=1
-            ), # total step-count (1+1+2) * 2 = 8
+            ),
             on_trace_ready=torch.profiler.tensorboard_trace_handler(
                 Path(".tb_logs") / Path(run_name)
                 #run_name
@@ -514,7 +519,6 @@ def fsdp_main(args, logger, run_name):
         )
 
     train_start_time_s = time.perf_counter()
-
     for epoch in range(1, epochs + 1):
         epoch_start_time_s = time.perf_counter()
         train_accuracy = train(
