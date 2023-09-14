@@ -1,1 +1,1 @@
-pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121pip3 install --pre torch torchvision --extra-index-url https://download.pytorch.org/whl/nightly/cu113
+pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121
