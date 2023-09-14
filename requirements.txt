@@ -6,8 +6,5 @@ pynvml==11.5.0
 tensorboard==2.14.0
 tensorboard-plugin-profile==2.13.1
 tokenizers==0.13.3
-torch==2.1.0.dev20230814+cu121
-torchaudio==2.1.0.dev20230814+cu121
-torchvision==0.16.0.dev20230814+cu121
 tqdm==4.66.1
 transformers==4.31.0
