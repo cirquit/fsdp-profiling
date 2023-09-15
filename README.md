@@ -39,14 +39,14 @@ source ~/.bashrc
 cd fsdp-profiling
 conda create -n nightly python=3.9 -y
 conda activate nightly
-pip install -r requirements.txt
+pip install -r requirements-nightly.txt
 ./install-nightly-torch.sh
 ```
 * Do the same for 1.13 environment
 ```bash
 conda create -n stable-1.13 python=3.7 -y
 conda activate stable-1.13
-pip install -r requirements.txt
+pip install -r requirements-1.13.txt
 ./install-1.13-torch.sh
 ```
 
