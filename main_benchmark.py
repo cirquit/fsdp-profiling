@@ -298,8 +298,6 @@ def fsdp_main(args, logger, run_name):
     setup_tasks(rank, world_size, cfg)
 
     batch_size = cfg.batch_size
-    val_batch_size = cfg.val_batch_size
-
     scaler = None  # only used for fp16
 
     mp_policy, wrapping_policy = get_policies(cfg)
@@ -439,7 +437,7 @@ def fsdp_main(args, logger, run_name):
             epoch_start_time_s=epoch_start_time_s,
             train_start_time_s=train_start_time_s,
             monitor=monitor,
-            sampler=sampler1,
+            sampler=sampler,
             profiler=profiler,
             scaler=scaler,
             logger=logger,

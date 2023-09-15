@@ -16,15 +16,8 @@ class benchmark_config:
     seed: int = 2022
 
     # model
-    model_name: str = "t5-3b"  # "google/t5-v1_1-small"
+    model_name: str = "t5-small"  # "t5-3b"
     tokenizer: str = "t5-large"
-    # available models
-    ## t5-base
-    # google/t5-v1_1-small
-    # google/t5-v1_1-base
-    # google/t5-v1_1-large
-    # google/t5-v1_1-xl  #3b
-    # google/t5-v1_1-xxl #11b
     save_model: bool = False
     model_checkpoint: str = "t5_small_save.pt"
     print_sharding_plan: bool = False
@@ -60,6 +53,6 @@ class benchmark_config:
     dataset_test = "datasets_grammar/grammar_validation.csv"
 
     # training
-    batch_size: int = 30
+    batch_size: int = 2
     num_epochs: int = 1
     max_step_count: int = 20
