@@ -6,6 +6,7 @@
 
 from dataclasses import dataclass
 
+
 @dataclass
 class benchmark_config:
     # general
@@ -62,13 +63,3 @@ class benchmark_config:
     batch_size: int = 30
     num_epochs: int = 1
     max_step_count: int = 20
-    # validation
-    run_validation: bool = False
-    val_batch_size: int = 4
-    block_for_validation: bool = False
-
-    # Fine Tuning
-    use_child_tuning: bool = False
-    use_task_free: bool = False
-    use_fisher_matrix: bool = False
-    percent_F: float = 0.3

@@ -4,97 +4,72 @@
 # This source code is licensed under the Apache-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-
-# main benchmark file for t5 training and prediction
-# use this to run fast test and/or profile with
-
-import os
 import argparse
+import functools
+import os
+import pickle
+import time
+from datetime import datetime
+from functools import partial
+from pathlib import Path
+
+import torch
+import torch.distributed as dist
+import torch.multiprocessing as mp
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import tqdm
+from datasets import load_dataset, load_metric
+from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+    CheckpointImpl, apply_activation_checkpointing, checkpoint_wrapper)
+from torch.distributed.fsdp import (BackwardPrefetch, CPUOffload,
+                                    FullStateDictConfig)
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp import (MixedPrecision, ShardingStrategy,
+                                    StateDictType)
+from torch.distributed.fsdp.wrap import (enable_wrap,
+                                         transformer_auto_wrap_policy, wrap)
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.optim.lr_scheduler import StepLR
+from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
+# for grammar correction
+from transformers import (AutoModelForSeq2SeqLM, AutoTokenizer,
+                          DataCollatorForSeq2Seq, T5ForConditionalGeneration,
+                          T5Tokenizer)
+# for generation
+from transformers.models.t5.modeling_t5 import T5Block
+
+import config
 import datasets_grammar as dg
+import policies
+import verify
+from policies import mixed_precision
+from utils.monitor import Monitor
+from utils.tb_logger import NoOPLogger, TBLogger
+from utils.timers import TBTimeIt as timeit
 
 #import nvidia_dlprof_pytorch_nvtx
 #nvidia_dlprof_pytorch_nvtx.init()
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-
-# from torchvision import datasets, transforms
 
 
-# for grammar correction
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
-# for generation
-from transformers.models.t5.modeling_t5 import T5Block
-from transformers import T5Tokenizer, T5ForConditionalGeneration
-from transformers import DataCollatorForSeq2Seq
 
-import functools
-import pickle
-from functools import partial
-from torch.optim.lr_scheduler import StepLR
-import torch.nn.functional as F
-import torch.distributed as dist
-import torch.multiprocessing as mp
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data.distributed import DistributedSampler
-from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
-    checkpoint_wrapper,
-    CheckpointImpl,
-    apply_activation_checkpointing,
-)
 
-from torch.distributed.fsdp import (
-    FullyShardedDataParallel as FSDP,
-    CPUOffload,
-    MixedPrecision,
-    BackwardPrefetch,
-    ShardingStrategy,
-    FullStateDictConfig,
-    StateDictType,
-)
 
-from torch.distributed.fsdp.wrap import (
-    transformer_auto_wrap_policy,
-    enable_wrap,
-    wrap,
-)
 
-from datasets import load_dataset, load_metric
-from torch.utils.data import DataLoader
-from pathlib import Path
-from torch.utils.data import DataLoader
 
-from ChildTuningOptimizer import ChildTuningAdamW
 
-# from sklearn.model_selection import train_test_split
-import time
-from datetime import datetime
-
-import verify
-import policies
-from policies import mixed_precision
-from utils.tb_logger import TBLogger, NoOPLogger
-from utils.monitor import Monitor
-from utils.timers import TBTimeIt as timeit
 #from utils.timers import NoOPTimeIt as timeit
 
-import datasets_grammar as dg
-import tqdm
-
-import config
-
-# some globals
-g_port = "12369"
-g_addr = "localhost"
 
 def _is_rank_0():
     return 0 == os.getenv("RANK")
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="PyTorch fsdp T5.11 Example")
+    parser = argparse.ArgumentParser(description="FSDP Profiling")
     parser.add_argument("--save-dir", default="/model_chkpt", type=str)
     parser.add_argument(
         "--save-model",
@@ -103,7 +78,7 @@ def parse_args():
         help="For Saving the current Model",
     )
     parser.add_argument(
-        "--seed", type=int, default=1, metavar="S", help="random seed (default: 2022)"
+        "--seed", type=int, default=42, metavar="S", help="random seed (default: 42)"
     )
     parser.add_argument(
         "--group_name", type=str, help="Logging group variable"
@@ -113,7 +88,7 @@ def parse_args():
         type=int,
         default=1,
         metavar="N",
-        help="number of epochs to train (default: 14)",
+        help="number of epochs to train (default: 1)",
     )
     args = parser.parse_args()
     return args
@@ -142,6 +117,7 @@ def get_policies(cfg):
         mixed_precision_policy = policies.fp32_policy
         if _is_rank_0():
            print(f"Precision: FP32 (default)")
+
     wrapping_policy = policies.get_t5_wrapper()
 
     return mixed_precision_policy, wrapping_policy
@@ -168,9 +144,20 @@ def clear_gpu_cache(rank=None):
 def setup_tasks(rank, world_size, cfg):
     """keep the basic setup list here"""
     setup(rank, world_size, cfg)
-    # clear_gpu_cache() - need to call torch set device first?
-    # set_printing()
     setup_environ_flags(cfg, rank)
+
+def log_config(logger, cfg):
+    for key, val in vars(cfg).items():
+        logger.log_text(f"00_cfg/{key}", str(val))
+
+def log_monitor_config(logger, monitor):
+    for key, val in monitor.get_static_info().items():
+        logger.log_text(f"00_cfg/{key}", str(val))
+    # log the version of torch nightly as well
+    logger.log_text(f"00_cfg/torch_version", str(torch.__version__))
+    major, mid, minor = torch.cuda.nccl.version()
+    logger.log_text(f"00_cfg/nccl_version", f"{major}.{mid}.{minor}")
+    logger.log_text(f"00_cfg/cuda_version", torch.version.cuda)
 
 def train(
     cfg,
@@ -287,60 +274,11 @@ def train(
 
     dist.all_reduce(ddp_loss, op=dist.ReduceOp.SUM)
     train_accuracy = ddp_loss[0] / ddp_loss[1]
-#    if rank == 0:
-#        inner_pbar.close()
     return train_accuracy
 
-def validation(cfg, model, local_rank, rank, world_size, test_loader, scaler):
-    model.eval()
-    correct = 0
-    ddp_loss = torch.zeros(3).to(local_rank)
-    if rank == 0:
-        inner_pbar = tqdm.tqdm(
-            range(len(test_loader)), colour="green", desc="Validation Epoch"
-        )
-    with torch.no_grad():
-        for batch in test_loader:
-            for key in batch.keys():
-                batch[key] = batch[key].to(local_rank)
-            output = model(
-                input_ids=batch["source_ids"],
-                attention_mask=batch["source_mask"],
-                labels=batch["target_ids"],
-            )
-            ddp_loss[0] += output["loss"].item()  # sum up batch loss
-            ddp_loss[1] += len(batch)
 
-            if rank == 0:
-                inner_pbar.update(1)
-            # pred = output.logits.argmax(
-            #    dim=1, keepdim=True
-            # )  # get the index of the max log-probability
-            # ddp_loss[1] += pred.eq(batch["target_ids"].view_as(pred)).sum().item()
-            # ddp_loss[2] += len(batch)
 
-    dist.all_reduce(ddp_loss, op=dist.ReduceOp.SUM)
 
-    val_loss = ddp_loss[0] / ddp_loss[1]
-
-    if rank == 0:
-        # test_loss = ddp_loss[0] / ddp_loss[1]
-        inner_pbar.close()
-        print(f"Validation Loss: {val_loss:.4f}")
-    return val_loss
-
-def log_config(logger, cfg):
-    for key, val in vars(cfg).items():
-        logger.log_text(f"00_cfg/{key}", str(val))
-
-def log_monitor_config(logger, monitor):
-    for key, val in monitor.get_static_info().items():
-        logger.log_text(f"00_cfg/{key}", str(val))
-    # log the version of torch nightly as well
-    logger.log_text(f"00_cfg/torch_version", str(torch.__version__))
-    major, mid, minor = torch.cuda.nccl.version()
-    logger.log_text(f"00_cfg/nccl_version", f"{major}.{mid}.{minor}")
-    logger.log_text(f"00_cfg/cuda_version", torch.version.cuda)
 
 def fsdp_main(args, logger, run_name):
     """Main entry point
@@ -357,10 +295,7 @@ def fsdp_main(args, logger, run_name):
     local_rank = int(os.environ["LOCAL_RANK"])
     rank = int(os.environ["RANK"])
     world_size = int(os.environ["WORLD_SIZE"])
-
     setup_tasks(rank, world_size, cfg)
-
-    #print(f"Rank {rank}: NCCL ENV = {os.getenv('NCCL_DEBUG')}")
 
     batch_size = cfg.batch_size
     val_batch_size = cfg.val_batch_size
@@ -370,7 +305,8 @@ def fsdp_main(args, logger, run_name):
     mp_policy, wrapping_policy = get_policies(cfg)
 
     if cfg.use_fp16:
-        from torch.distributed.fsdp.sharded_grad_scaler import ShardedGradScaler
+        from torch.distributed.fsdp.sharded_grad_scaler import \
+            ShardedGradScaler
         scaler = ShardedGradScaler()
 
     model_name = cfg.model_name
@@ -394,12 +330,6 @@ def fsdp_main(args, logger, run_name):
     # tokenizer = T5Tokenizer.from_pretrained(model_name)
     # dataset_name = "jfleg_train.csv"
 
-            # print(f"{dataset_name} contains: {dataset.keys()}")
-        # print("Size of {dataset_name} train dataset: ", dataset["train"].shape)
-        # print(
-        #    "Size of {dataset_name} Validation dataset: ", dataset["validation"].shape
-        # )
-
     train_name = None
     if cfg.dataset_train:
         train_name = cfg.dataset_train
@@ -408,27 +338,19 @@ def fsdp_main(args, logger, run_name):
     if _is_rank_0():
         print(f"Train {train_name} = {len(train_dataset)} samples")
 
-    val_dataset = dg.get_dataset(tokenizer, cfg.dataset_test, 512, 512, True)
-    if _is_rank_0():
-        print(f"Val {cfg.dataset_test} = {len(val_dataset)} samples")
-
-    sampler1 = DistributedSampler(
+    sampler = DistributedSampler(
         train_dataset, rank=rank, num_replicas=world_size, shuffle=True
     )
-    sampler2 = DistributedSampler(val_dataset, rank=rank, num_replicas=world_size)
 
-    train_kwargs = {"batch_size": batch_size, "sampler": sampler1}
-    test_kwargs = {"batch_size": val_batch_size, "sampler": sampler2}
+    train_kwargs = {"batch_size": batch_size, "sampler": sampler}
     cuda_kwargs = {
         "num_workers": cfg.num_workers_dataloader,
         "pin_memory": False,
         "shuffle": False,
     }
     train_kwargs.update(cuda_kwargs)
-    test_kwargs.update(cuda_kwargs)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, **train_kwargs)
-    test_loader = torch.utils.data.DataLoader(val_dataset, **test_kwargs)
 
     torch.cuda.set_device(local_rank)
     clear_gpu_cache(local_rank)
@@ -476,23 +398,9 @@ def fsdp_main(args, logger, run_name):
 
     lr = 0.0008
     gamma = 0.85
-    if cfg.use_task_free:
-        optimizer = ChildTuningAdamW(
-            model.parameters(),
-            lr=lr,
-            weight_decay=0.01,
-            reserve_p=cfg.percent_F,
-            mode="taskfree",
-        )
-    else:
-        optimizer = optim.AdamW(model.parameters(), lr=lr)
-
+    optimizer = optim.AdamW(model.parameters(), lr=lr)
     lr_scheduler = StepLR(optimizer, step_size=1, gamma=gamma)
     epochs = cfg.num_epochs
-
-    best_train_accuracy = float("-inf")
-    best_val_loss = float("inf")
-    curr_val_loss = float("inf")
 
     profiler = None
     if cfg.enable_profiler:
@@ -509,8 +417,6 @@ def fsdp_main(args, logger, run_name):
             ),
             on_trace_ready=torch.profiler.tensorboard_trace_handler(
                 Path(".tb_logs") / Path(run_name)
-                #run_name
-#                "./test-logs/test"
             ),
             record_shapes=True,
             with_stack=True,
@@ -540,16 +446,6 @@ def fsdp_main(args, logger, run_name):
             lr_scheduler=lr_scheduler,
             run_name_dir=Path(".tb_logs") / Path(run_name)
         )
-        if cfg.block_for_validation:
-            dist.barrier()
-            #if rank == 0:
-            #    print(f"--> blocking ranks for pre-validation synching...")
-
-        if cfg.run_validation:
-            curr_val_loss = validation(
-                cfg, model, local_rank, rank, world_size, test_loader, scaler=scaler
-            )
-
 
     if profiler:
         profiler.stop()
@@ -561,10 +457,7 @@ def fsdp_main(args, logger, run_name):
 
 if __name__ == "__main__":
     args = parse_args()
-
     rank = int(os.environ["RANK"])
     run_name = f"{args.group_name}-r{rank}"
-
     with TBLogger(run_name=run_name) as logger:
-        # torch run start
         fsdp_main(args, logger, run_name)
