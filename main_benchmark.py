@@ -438,7 +438,7 @@ def fsdp_main(args, logger, run_name):
             epoch_start_time_s=epoch_start_time_s,
             train_start_time_s=train_start_time_s,
             monitor=monitor,
-            sampler=sampler1,
+            sampler=sampler,
             profiler=profiler,
             scaler=scaler,
             logger=logger,
