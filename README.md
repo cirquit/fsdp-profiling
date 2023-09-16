@@ -7,6 +7,10 @@ There are four branches:
     - some gpu metrics are missing, like `requested_bytes.all.current`
 * `gpt2-nightly`
 * `gpt2-1.13`
+    - disabled `use_orig_params=True` in FSDP as it's not available
+    - some gpu metrics are missing, like `requested_bytes.all.current`
+* `cai`
+    - also uses torch==1.13
 
 Because we want to profile ColossialAIs (CAI) memory manager and general implementation, we need to make an apples-to-apples comparison with the same 1.13 PyTorch version, as CAI does not support PyTorch > 1.13 at the time of writing.
 
@@ -51,4 +55,12 @@ conda activate stable-1.13
 pip install -r requirements-1.13.txt
 ./install-1.13-torch.sh
 ```
+* And lastly for the `cai` environment
+```bash
+conda create -n cai python=3.7 -y
+conda activate cai
+cd cai
+pip install -r requirements.txt
+```
+* And finally, let it rip with the configuration that you want in `cfg/benchmark.py` for all FSDP runs, or with `cai` you have to modify the bash runner
 * `./run_benchmark.sh`
