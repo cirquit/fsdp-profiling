@@ -60,8 +60,6 @@ from utils.timers import TBTimeIt as timeit
 
 
 
-
-
 #from utils.timers import NoOPTimeIt as timeit
 
 
@@ -185,7 +183,7 @@ def train(
         sampler.set_epoch(epoch)
     if rank == 0:
         inner_pbar = tqdm.tqdm(
-            range(cfg.max_step_count), colour="blue", desc="Training Epoch"
+            range(cfg.max_step_count-1), colour="blue", desc="Training Epoch"
         )
 
     # starting timer for dataload due to iterator
@@ -269,7 +267,7 @@ def train(
         # we're currently only interested in the first few steps for profiling!
         if step_counter >= cfg.max_step_count:
             if rank == 0:
-                print(f"Early stopping with {cfg.max_step_count=}")
+                print(f"Early stopping with {cfg.max_step_count} steps.")
             break
 
     dist.all_reduce(ddp_loss, op=dist.ReduceOp.SUM)
@@ -362,16 +360,13 @@ def fsdp_main(args, logger, run_name):
     else:
         sharding_strategy = ShardingStrategy.FULL_SHARD
 
-    cpu_offload_fsdp = CPUOffload(offload_params=cfg.cpu_offloading)
-
     model = FSDP(
         model,
         auto_wrap_policy=wrapping_policy,
         mixed_precision=mp_policy,
         device_id=torch.cuda.current_device(),
         sharding_strategy=sharding_strategy,
-        use_orig_params=True,
-        cpu_offload=cpu_offload_fsdp
+        #use_orig_params=True,
     )
 
     if cfg.fsdp_activation_checkpointing:
@@ -386,7 +381,7 @@ def fsdp_main(args, logger, run_name):
         apply_activation_checkpointing(
             model,
             checkpoint_wrapper_fn=non_reentrant_wrapper,
-            auto_wrap_policy=auto_wrap_policy
+            check_fn=lambda submodule: isinstance(submodule, T5Block)
         )
 
     if _is_rank_0():
