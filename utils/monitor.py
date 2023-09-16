@@ -461,40 +461,40 @@ class Monitor:
         # average segment size (cudaMalloc() calls vs its size)
         # if high: consecutive memory allocated => good
         # if low: a lot of non-consecutive memory allocated => bad
-        return_dict["04_agg_gpu/avg_segment_size_current_bytes"] = \
-            memory_summary_dict["requested_bytes.all.current"] / \
-            memory_summary_dict["segment.all.current"]
+        #return_dict["04_agg_gpu/avg_segment_size_current_bytes"] = \
+        #    memory_summary_dict["requested_bytes.all.current"] / \
+        #    memory_summary_dict["segment.all.current"]
         # large pool > 1MB
-        return_dict["04_agg_gpu/avg_large_segment_size_current_bytes"] = \
-            memory_summary_dict["requested_bytes.large_pool.current"] / \
-            memory_summary_dict["segment.large_pool.current"]
+        #return_dict["04_agg_gpu/avg_large_segment_size_current_bytes"] = \
+        #    memory_summary_dict["requested_bytes.large_pool.current"] / \
+        #    memory_summary_dict["segment.large_pool.current"]
         # small pool < 1MB
-        return_dict["04_agg_gpu/avg_small_segment_size_current_bytes"] = \
-            memory_summary_dict["requested_bytes.small_pool.current"] / \
-            memory_summary_dict["segment.small_pool.current"]
+        #return_dict["04_agg_gpu/avg_small_segment_size_current_bytes"] = \
+        #    memory_summary_dict["requested_bytes.small_pool.current"] / \
+        #    memory_summary_dict["segment.small_pool.current"]
 
         # average active block size (inner parts of a segment that was allocated by cudaMalloc())
         # if high: good
         # if low: bad
-        return_dict["04_agg_gpu/avg_block_size_current_bytes"] = \
-            memory_summary_dict["active_bytes.all.current"] / \
-            memory_summary_dict["active.all.current"]
+        #return_dict["04_agg_gpu/avg_block_size_current_bytes"] = \
+        #    memory_summary_dict["active_bytes.all.current"] / \
+        #    memory_summary_dict["active.all.current"]
 
         # average inactive block size (inactive + non-releasable)
         # if high: good as its easier to remove with torch.cuda.empty_cache?
         # if low: bad?
-        return_dict["04_agg_gpu/avg_inactive_block_size_current_bytes"] = \
-            memory_summary_dict["inactive_split_bytes.all.current"] / \
-            memory_summary_dict["inactive_split.all.current"]
+        #return_dict["04_agg_gpu/avg_inactive_block_size_current_bytes"] = \
+        #    memory_summary_dict["inactive_split_bytes.all.current"] / \
+        #    memory_summary_dict["inactive_split.all.current"]
 
         # caching allocator rounds requests to minimize memory fragmentation
         # the different between allocated - requested bytes is the overhead that
         # comes from rounding
         # if high: bad, as we're wasting memory to reduce fragmentation
         # if log: good, we're not wasting memory
-        return_dict["04_agg_gpu/allocation_rounding_overhead_bytes"] = \
-            memory_summary_dict["allocated_bytes.all.current"] - \
-            memory_summary_dict["requested_bytes.all.current"]
+        #return_dict["04_agg_gpu/allocation_rounding_overhead_bytes"] = \
+        #    memory_summary_dict["allocated_bytes.all.current"] - \
+        #    memory_summary_dict["requested_bytes.all.current"]
 
         return {
             **return_dict
