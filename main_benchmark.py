@@ -185,7 +185,7 @@ def train(
         sampler.set_epoch(epoch)
     if rank == 0:
         inner_pbar = tqdm.tqdm(
-            range(cfg.max_step_count), colour="blue", desc="Training Epoch"
+            range(cfg.max_step_count-1), colour="blue", desc="Training Epoch"
         )
 
     # starting timer for dataload due to iterator
