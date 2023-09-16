@@ -16,7 +16,7 @@ class benchmark_config:
     seed: int = 2022
 
     # model
-    model_name: str = "t5-small"  # "t5-3b"
+    model_name: str = "t5-3b"
     tokenizer: str = "t5-large"
     save_model: bool = False
     model_checkpoint: str = "t5_small_save.pt"
