@@ -13,5 +13,5 @@ export OMP_NUM_THREADS=32
 
 #dlprof --mode=pytorch --nsys_opts="-t cuda,nvtx" --reports all --output_path="$DLPROF_PATH" \
 #        --key_op="__getattr__" \
-torchrun --nnodes=1 --nproc_per_node=1 --rdzv_id=101 --rdzv_endpoint="localhost:5699" \
+torchrun --nnodes=1 --nproc_per_node=2 --rdzv_id=101 --rdzv_endpoint="localhost:5699" \
     main_benchmark.py  --group_name $EXP_NAME
