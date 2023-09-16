@@ -3,6 +3,8 @@
 There are four branches:
 * `fsdp-nightly`
 * `fsdp-1.13`
+    - disabled `use_orig_params=True` in FSDP as it's not available
+    - some gpu metrics are missing, like `requested_bytes.all.current`
 * `gpt2-nightly`
 * `gpt2-1.13`
 
@@ -49,7 +51,4 @@ conda activate stable-1.13
 pip install -r requirements.txt
 ./install-1.13-torch.sh
 ```
-
-
-
-
+* `./run_benchmark.sh`
