@@ -32,15 +32,8 @@ from torch.distributed.fsdp.wrap import (enable_wrap,
                                          transformer_auto_wrap_policy, wrap)
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim.lr_scheduler import StepLR
-from torch.utils.data import DataLoader
-from torch.utils.data.distributed import DistributedSampler
-# for grammar correction
-from transformers import (AutoModelForSeq2SeqLM, AutoTokenizer,
-                          DataCollatorForSeq2Seq, T5ForConditionalGeneration,
-                          T5Tokenizer)
-# for generation
-from transformers.models.t5.modeling_t5 import T5Block
 from transformers.models.gpt2.modeling_gpt2 import GPT2Block
+from transformers.models.t5.modeling_t5 import T5Block
 
 import config
 import datasets_grammar as dg
@@ -168,7 +161,6 @@ def train(
     train_start_time_s,
     monitor,
     run_name_dir,
-    sampler=None,
     profiler=None,
     scaler=None,
     logger=None,
@@ -177,11 +169,9 @@ def train(
     model.train()
     ddp_loss = torch.zeros(2).to(local_rank)
 
-    if sampler:
-        sampler.set_epoch(epoch)
     if rank == 0:
         inner_pbar = tqdm.tqdm(
-            range(cfg.max_step_count), colour="blue", desc="Training Epoch"
+            range(cfg.max_step_count-1), colour="blue", desc="Training Epoch"
         )
 
     criterion = GPTLMLoss()
@@ -299,8 +289,6 @@ def fsdp_main(args, logger, run_name):
     setup_tasks(rank, world_size, cfg)
 
     batch_size = cfg.batch_size
-    val_batch_size = cfg.val_batch_size
-
     scaler = None  # only used for fp16
 
     mp_policy, wrapping_policy = get_policies(cfg)
@@ -409,7 +397,6 @@ def fsdp_main(args, logger, run_name):
             epoch_start_time_s=epoch_start_time_s,
             train_start_time_s=train_start_time_s,
             monitor=monitor,
-            sampler=sampler1,
             profiler=profiler,
             scaler=scaler,
             logger=logger,
