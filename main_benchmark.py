@@ -298,7 +298,6 @@ def fsdp_main(args, logger, run_name):
     setup_tasks(rank, world_size, cfg)
 
     batch_size = cfg.batch_size
-    val_batch_size = cfg.val_batch_size
 
     scaler = None  # only used for fp16
 
