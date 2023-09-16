@@ -4,7 +4,7 @@ touch .logcounter/$EXP_NAME
 echo $EXP_NAME
 
 export DOWNLOADED_DATASETS_PATH="/dccstor/ais-model-store/hugginface"
-export OMP_NUM_THREADS=2
+export OMP_NUM_THREADS=32
 
 # DLPROF_PATH="./dlprof/$EXP_NAME"
 
