@@ -1,1 +1,0 @@
-from .checkpoint_handling import prune_checkpoints
