@@ -7,6 +7,7 @@
 import argparse
 import functools
 import os
+#os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import pickle
 import time
 from datetime import datetime
