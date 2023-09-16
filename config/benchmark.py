@@ -55,4 +55,4 @@ class benchmark_config:
     # training
     batch_size: int = 2
     num_epochs: int = 1
-    max_step_count: int = 20
+    max_step_count: int = 50
