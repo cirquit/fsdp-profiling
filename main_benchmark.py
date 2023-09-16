@@ -40,6 +40,7 @@ from transformers import (AutoModelForSeq2SeqLM, AutoTokenizer,
                           T5Tokenizer)
 # for generation
 from transformers.models.t5.modeling_t5 import T5Block
+from transformers.models.gpt2.modeling_gpt2 import GPT2Block
 
 import config
 import datasets_grammar as dg
@@ -49,21 +50,12 @@ from policies import mixed_precision
 from utils.monitor import Monitor
 from utils.tb_logger import NoOPLogger, TBLogger
 from utils.timers import TBTimeIt as timeit
+from utils.model_zoo import model_builder, GPTLMLoss
 
 #import nvidia_dlprof_pytorch_nvtx
 #nvidia_dlprof_pytorch_nvtx.init()
 
-
-
-
-
-
-
-
-
-
 #from utils.timers import NoOPTimeIt as timeit
-
 
 def _is_rank_0():
     return 0 == os.getenv("RANK")
@@ -118,7 +110,7 @@ def get_policies(cfg):
         if _is_rank_0():
            print(f"Precision: FP32 (default)")
 
-    wrapping_policy = policies.get_t5_wrapper()
+    wrapping_policy = policies.get_gpt2_wrapper()
 
     return mixed_precision_policy, wrapping_policy
 
@@ -159,13 +151,17 @@ def log_monitor_config(logger, monitor):
     logger.log_text(f"00_cfg/nccl_version", f"{major}.{mid}.{minor}")
     logger.log_text(f"00_cfg/cuda_version", torch.version.cuda)
 
+def get_data(batch_size, sequence_length, vocab_size):
+    input_ids = torch.randint(0, vocab_size, (batch_size, sequence_length), device=torch.cuda.current_device())
+    attention_mask = torch.ones_like(input_ids)
+    return input_ids, attention_mask
+
 def train(
     cfg,
     model,
     local_rank,
     rank,
     world_size,
-    train_loader,
     optimizer,
     epoch,
     epoch_start_time_s,
@@ -188,12 +184,22 @@ def train(
             range(cfg.max_step_count), colour="blue", desc="Training Epoch"
         )
 
+    criterion = GPTLMLoss()
     # starting timer for dataload due to iterator
     step_time_start_s = time.perf_counter()
     step_counter = 1
 
     #with torch.autograd.profiler.emit_nvtx():
-    for batch in train_loader:
+    for _ in range(cfg.max_step_count):
+        input_ids, attention_mask = get_data(
+            batch_size=cfg.batch_size,
+            sequence_length=1024,
+            vocab_size=50257
+        )
+        batch = dict()
+        batch["source_ids"] = input_ids
+        batch["source_mask"] = attention_mask
+
         dataload_time_s = time.perf_counter() - step_time_start_s
         # calculate for tokens/s
         token_count = sum([len(e) for e in batch["source_ids"]])
@@ -207,10 +213,9 @@ def train(
             output = model(
                 input_ids=batch["source_ids"],
                 attention_mask=batch["source_mask"],
-                labels=batch["target_ids"],
             )
 
-        loss = output["loss"]
+        loss = criterion(output, batch["source_ids"])
         if scaler:
             with timeit("backward", logger) as backward_timer:
                 scaler.scale(loss).backward()
@@ -276,10 +281,6 @@ def train(
     train_accuracy = ddp_loss[0] / ddp_loss[1]
     return train_accuracy
 
-
-
-
-
 def fsdp_main(args, logger, run_name):
     """Main entry point
     """
@@ -313,10 +314,7 @@ def fsdp_main(args, logger, run_name):
     printable_model_name = str.replace(model_name, "/", "=")
     save_name = model_name + "-"
 
-    # grammar correction
-    tokenizer = AutoTokenizer.from_pretrained(cfg.tokenizer, model_max_length=512)
-
-    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+    model = model_builder(model_name)(checkpoint=False)
 
     if cfg.memory_snapshotting:
         torch.cuda.memory._record_memory_history(
@@ -324,33 +322,6 @@ def fsdp_main(args, logger, run_name):
             trace_alloc_max_entries=100000, # keep 100,000 alloc/free events from before the snapshot              
             trace_alloc_record_context=True # record stack information for the trace events
         )
-
-    # summarization
-    # model = T5ForConditionalGeneration.from_pretrained(model_name)
-    # tokenizer = T5Tokenizer.from_pretrained(model_name)
-    # dataset_name = "jfleg_train.csv"
-
-    train_name = None
-    if cfg.dataset_train:
-        train_name = cfg.dataset_train
-
-    train_dataset = dg.get_dataset(tokenizer, train_name, 512, 512, True)
-    if _is_rank_0():
-        print(f"Train {train_name} = {len(train_dataset)} samples")
-
-    sampler = DistributedSampler(
-        train_dataset, rank=rank, num_replicas=world_size, shuffle=True
-    )
-
-    train_kwargs = {"batch_size": batch_size, "sampler": sampler}
-    cuda_kwargs = {
-        "num_workers": cfg.num_workers_dataloader,
-        "pin_memory": False,
-        "shuffle": False,
-    }
-    train_kwargs.update(cuda_kwargs)
-
-    train_loader = torch.utils.data.DataLoader(train_dataset, **train_kwargs)
 
     torch.cuda.set_device(local_rank)
     clear_gpu_cache(local_rank)
@@ -379,7 +350,7 @@ def fsdp_main(args, logger, run_name):
     if cfg.fsdp_activation_checkpointing:
         auto_wrap_policy = functools.partial(
             transformer_auto_wrap_policy,
-            transformer_layer_cls={T5Block}
+            transformer_layer_cls={GPT2Block}
         )
         non_reentrant_wrapper = functools.partial(
             checkpoint_wrapper,
@@ -433,7 +404,6 @@ def fsdp_main(args, logger, run_name):
             local_rank,
             rank,
             world_size,
-            train_loader,
             optimizer,
             epoch=epoch,
             epoch_start_time_s=epoch_start_time_s,

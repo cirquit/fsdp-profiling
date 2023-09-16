@@ -12,6 +12,7 @@ import torch.nn as nn
 import torch
 
 from transformers.models.t5.modeling_t5 import T5Block
+from transformers.models.gpt2.modeling_gpt2 import GPT2Block
 
 from torch.distributed.fsdp.fully_sharded_data_parallel import (
     FullyShardedDataParallel as FSDP,
@@ -27,6 +28,22 @@ from torch.distributed.fsdp.wrap import (
 
 import functools
 from typing import Type
+
+def get_gpt2_wrapper():
+    """we register our main layer class and use the fsdp transformer wrapping policy
+    ensures embedding layers are in the root fsdp unit for shared access and that fsdp units map to transformer layers
+    """
+    # ====   use new transformer wrapper
+
+    gpt2_auto_wrap_policy = functools.partial(
+        transformer_auto_wrap_policy,
+        transformer_layer_cls={
+            GPT2Block,
+        },
+    )
+
+    return gpt2_auto_wrap_policy
+
 
 
 def get_t5_wrapper():
