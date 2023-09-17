@@ -16,7 +16,7 @@ class benchmark_config:
     seed: int = 2022
 
     # model
-    model_name: str = "gpt2_medium"
+    model_name: str = "gpt2_xl"
     tokenizer: str = ""
     save_model: bool = False
     model_checkpoint: str = "t5_small_save.pt"
@@ -53,6 +53,6 @@ class benchmark_config:
     dataset_test = "datasets_grammar/grammar_validation.csv"
 
     # training
-    batch_size: int = 2
+    batch_size: int = 8
     num_epochs: int = 1
-    max_step_count: int = 20
+    max_step_count: int = 50
