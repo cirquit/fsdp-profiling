@@ -1,5 +1,10 @@
 # Profiling FSDP with T5 and GPT2-xl
 
+Original FSDP-T5 code: https://github.com/pytorch/workshops/tree/master/FSDP_Workshop
+Original GPT2 CAI code: https://github.com/hpcaitech/ColossalAI/tree/main/examples/language/gpt
+
+Our versions are partly adapted from these originals.
+
 There are four branches:
 * `fsdp-nightly`
 * `fsdp-1.13`
