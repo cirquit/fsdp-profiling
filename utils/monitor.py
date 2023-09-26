@@ -1,36 +1,11 @@
 import os
-import time
-import psutil
-
-import threading
 import subprocess as sp
+import threading
 import time
+
+import psutil
 from pynvml import *
-    #nvmlInit, \
-    #nvmlDeviceGetCount, \
-    #nvmlDeviceGetHandleByIndex, \
-    #nvmlSystemGetDriverVersion, \
-    #nvmlDeviceGetName, \
-    #nvmlDeviceGetPciInfo, \
-    #nvmlDeviceGetVbiosVersion, \
-    #nvmlDeviceGetMaxPcieLinkGeneration, \
-    #nvmlDeviceGetCurrPcieLinkGeneration, \
-    #nvmlDeviceGetMaxPcieLinkWidth, \
-    #nvmlDeviceGetCurrPcieLinkWidth
-#import wandb
 
-#def start_monitor(monitor_log_frequency_ms):
-#    def inner():
-#        mon = Monitor()
-#        wandb.log(mon.get_static_info())
-#        monitor_log_frequency_s = monitor_log_frequency_ms / 1000
-#        while True:
-#            wandb.log({**mon.get_sys_info()})
-#            time.sleep(monitor_log_frequency_s)
-
-#    t = threading.Thread(target=inner)
-#    t.daemon = True
-#    t.start()
 
 class Monitor:
     def __init__(self, cuda_enabled=False):
@@ -457,6 +432,8 @@ class Monitor:
         return_dict["04_agg_gpu/memory_fragmentation_ratio"] = \
             sum(b['allocated_size'] for b in snapshot) / \
             sum(b['total_size'] for b in snapshot)
+
+        # torch 1.13 does not support these values yet
 
         # average segment size (cudaMalloc() calls vs its size)
         # if high: consecutive memory allocated => good
