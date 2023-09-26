@@ -1,7 +1,9 @@
-import torch
 import traceback
-from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
+
+import torch
+from torch.utils.tensorboard import SummaryWriter
+
 
 class NoOPLogger():
     """ """
