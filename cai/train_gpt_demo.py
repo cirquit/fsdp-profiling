@@ -283,8 +283,8 @@ def main():
             for key, val in vars(args).items():
                 tblogger.log_text(f"00_cfg/{key}", str(val))
 
-            tblogger.log_text(f"00_cfg/batch_size", args.batch_size)
-            tblogger.log_text(f"00_cfg/max_steps", NUM_STEPS)
+            tblogger.log_text(f"00_cfg/batch_size", str(args.batch_size))
+            tblogger.log_text(f"00_cfg/max_steps", str(NUM_STEPS))
             for n in range(NUM_STEPS):
                 train_step(tblogger=tblogger, step_counter=n, monitor=monitor, batch_size=args.batch_size)
                 prof.step()
