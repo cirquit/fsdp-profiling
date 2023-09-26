@@ -1,41 +1,14 @@
 import os
-import time
-import psutil
-
-import threading
 import subprocess as sp
+import threading
 import time
+
+import psutil
 from pynvml import *
-    #nvmlInit, \
-    #nvmlDeviceGetCount, \
-    #nvmlDeviceGetHandleByIndex, \
-    #nvmlSystemGetDriverVersion, \
-    #nvmlDeviceGetName, \
-    #nvmlDeviceGetPciInfo, \
-    #nvmlDeviceGetVbiosVersion, \
-    #nvmlDeviceGetMaxPcieLinkGeneration, \
-    #nvmlDeviceGetCurrPcieLinkGeneration, \
-    #nvmlDeviceGetMaxPcieLinkWidth, \
-    #nvmlDeviceGetCurrPcieLinkWidth
-#import wandb
 
-#def start_monitor(monitor_log_frequency_ms):
-#    def inner():
-#        mon = Monitor()
-#        wandb.log(mon.get_static_info())
-#        monitor_log_frequency_s = monitor_log_frequency_ms / 1000
-#        while True:
-#            wandb.log({**mon.get_sys_info()})
-#            time.sleep(monitor_log_frequency_s)
-
-#    t = threading.Thread(target=inner)
-#    t.daemon = True
-#    t.start()
 
 class Monitor:
     def __init__(self, cuda_enabled=False):
-
-        # 
         self.cuda_enabled=cuda_enabled
         self.gpus_attached=0
         self.gpu_handles=[]
@@ -491,7 +464,7 @@ class Monitor:
         # the different between allocated - requested bytes is the overhead that
         # comes from rounding
         # if high: bad, as we're wasting memory to reduce fragmentation
-        # if log: good, we're not wasting memory
+        # if low: good, we're not wasting memory
         return_dict["04_agg_gpu/allocation_rounding_overhead_bytes"] = \
             memory_summary_dict["allocated_bytes.all.current"] - \
             memory_summary_dict["requested_bytes.all.current"]
