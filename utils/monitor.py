@@ -40,7 +40,7 @@ class Monitor:
         self.create_interrupt_snapshot()
         self.create_disk_access_snapshot()
 
-    def __exit(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type, exc_value, traceback):
         if self.cuda_enabled:
             nvmlShutdown()
 
