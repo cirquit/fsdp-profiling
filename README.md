@@ -22,8 +22,15 @@ The repository is organized in five branches for each configuration:
 ### Prepare the environment
 
 * Install the same or higher CUDA driver for each experiment on the node.
-  - PyTorch 1.13 -> CUDA 11.7 `wget https://developer.download.nvidia.com/compute/cuda/11.7.0/local_installers/cuda_11.7.0_515.43.04_linux.run`
-  - PyTorch Nightly (2.x)  -> CUDA 12.2 `wget https://developer.download.nvidia.com/compute/cuda/12.2.2/local_installers/cuda_12.2.2_535.104.05_linux.run`
+  - PyTorch 1.13 -> CUDA 11.7
+```bash
+wget https://developer.download.nvidia.com/compute/cuda/11.7.0/local_installers/cuda_11.7.0_515.43.04_linux.run
+```
+  - PyTorch Nightly (2.x)  -> CUDA 12.2
+```bash
+wget https://developer.download.nvidia.com/compute/cuda/12.2.2/local_installers/cuda_12.2.2_535.104.05_linux.run
+```
+
 ```bash
 sudo apt update
 sudo apt install wget libxml2 build-essential psmisc file rsync tmux git linux-headers-`uname -r` -y
